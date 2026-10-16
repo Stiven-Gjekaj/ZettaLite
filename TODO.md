@@ -28,7 +28,7 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 - Measure the real limit of each codec on the phone, and put it in the table.
 - Skip the loop filter when the own player falls behind.
 
-## 0.3: addons
+## 0.3: addons (done, 2026-10-17)
 
 - Add the Sources screen: one URL on each line.
 - Read Stremio manifests, catalogs, and meta.
