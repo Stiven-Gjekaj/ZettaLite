@@ -30,13 +30,32 @@ NSURL *ZLMediaURLFromText(NSString *text) {
 
 ZLLink *ZLParseLink(NSURL *url) {
     if (![url.scheme.lowercaseString isEqualToString:@"zettalite"]) return nil;
-    if (![url.host.lowercaseString isEqualToString:@"play"]) return nil;
+    NSString *host = url.host.lowercaseString;
     NSDictionary *query = ZLQuery(url);
-    NSURL *media = ZLMediaURLFromText(query[@"url"]);
-    if (!media) return nil;
     ZLLink *link = [ZLLink new];
-    link.mediaURL = media;
-    link.title = query[@"title"];
-    link.startTime = MAX(0, [query[@"t"] doubleValue]);
+    if ([host isEqualToString:@"play"]) {
+        NSURL *media = ZLMediaURLFromText(query[@"url"]);
+        if (!media) return nil;
+        link.kind = ZLLinkPlay;
+        link.mediaURL = media;
+        link.title = query[@"title"];
+        link.startTime = MAX(0, [query[@"t"] doubleValue]);
+    } else if ([host isEqualToString:@"title"]) {
+        if (![query[@"type"] length] || ![query[@"id"] length]) return nil;
+        link.kind = ZLLinkTitle;
+        link.type = query[@"type"];
+        link.identifier = query[@"id"];
+    } else if ([host isEqualToString:@"search"]) {
+        if (![query[@"q"] length]) return nil;
+        link.kind = ZLLinkSearch;
+        link.text = query[@"q"];
+    } else if ([host isEqualToString:@"tab"]) {
+        NSArray *tabs = @[ @"home", @"search", @"library", @"live", @"settings" ];
+        if (![tabs containsObject:query[@"name"]]) return nil;
+        link.kind = ZLLinkTab;
+        link.text = query[@"name"];
+    } else {
+        return nil;
+    }
     return link;
 }
