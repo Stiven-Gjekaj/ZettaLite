@@ -40,5 +40,5 @@ ZL_TEST(test_trust_refuses_an_empty_host) {
     ZLTrust *trust = [[ZLTrust alloc] initWithDefaults:[ZLMemoryDefaults new]];
     [trust trustHost:@""];
     ZL_EQUAL_INT([trust hosts].count, 0);
-    ZL_EXPECT(![trust acceptTrust:NULL host:@""]);
+    ZL_EXPECT(![trust isTrusted:@""]);
 }

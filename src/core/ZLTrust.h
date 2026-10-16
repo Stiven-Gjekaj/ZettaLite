@@ -1,10 +1,8 @@
-// The hosts that the user trusts although their certificate fails the trust
-// check of iOS 6. iOS 6 does not know newer root certificates, for example
-// ISRG Root X1 of Let's Encrypt. The app asks the user one time for each host.
-// It never trusts all hosts.
+// The hosts that the user trusts although their certificate fails the check
+// of the app, for example a certificate that the host signed itself. The app
+// asks the user one time for each host. It never trusts all hosts.
 
 #import <Foundation/Foundation.h>
-#import <Security/Security.h>
 
 extern NSString *const ZLErrorDomain;
 
@@ -31,8 +29,5 @@ NSError *ZLMakeError(ZLErrorCode code, NSString *text);
 - (void)trustHost:(NSString *)host;
 - (void)forgetHost:(NSString *)host;
 - (NSArray *)hosts;
-
-// YES if the system accepts the trust, or if the user trusts the host.
-- (BOOL)acceptTrust:(SecTrustRef)trust host:(NSString *)host;
 
 @end

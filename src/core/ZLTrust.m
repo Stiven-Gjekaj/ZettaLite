@@ -53,13 +53,4 @@ NSError *ZLMakeError(ZLErrorCode code, NSString *text) {
     }
 }
 
-- (BOOL)acceptTrust:(SecTrustRef)trust host:(NSString *)host {
-    SecTrustResultType result = kSecTrustResultInvalid;
-    if (trust && SecTrustEvaluate(trust, &result) == errSecSuccess &&
-        (result == kSecTrustResultProceed || result == kSecTrustResultUnspecified)) {
-        return YES;
-    }
-    return [self isTrusted:host];
-}
-
 @end
