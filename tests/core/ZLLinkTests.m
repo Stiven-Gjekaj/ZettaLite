@@ -5,6 +5,9 @@ ZL_TEST(test_link_reads_a_play_link) {
     ZLLink *link = ZLParseLink([NSURL URLWithString:@"zettalite://play?url=https%3A%2F%2Fexample.org%2Fa%20b.mkv%3Fx%3D1&title=A+film"]);
     ZL_EQUAL(link.mediaURL.absoluteString, @"https://example.org/a%20b.mkv?x=1");
     ZL_EQUAL(link.title, @"A film");
+    ZL_EXPECT(link.startTime == 0);
+    link = ZLParseLink([NSURL URLWithString:@"zettalite://play?url=http%3A%2F%2Fexample.org%2Fv.mkv&t=95.5"]);
+    ZL_EXPECT(link.startTime == 95.5);
 }
 
 ZL_TEST(test_link_refuses_other_links) {

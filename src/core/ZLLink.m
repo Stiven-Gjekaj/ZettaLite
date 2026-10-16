@@ -37,5 +37,6 @@ ZLLink *ZLParseLink(NSURL *url) {
     ZLLink *link = [ZLLink new];
     link.mediaURL = media;
     link.title = query[@"title"];
+    link.startTime = MAX(0, [query[@"t"] doubleValue]);
     return link;
 }

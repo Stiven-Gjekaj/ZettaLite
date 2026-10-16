@@ -36,7 +36,7 @@
     if (!link) return NO;
     // A link can come while a player shows. Close it first.
     [self.window.rootViewController dismissViewControllerAnimated:NO completion:nil];
-    [self.linkScreen playURL:link.mediaURL title:link.title];
+    [self.linkScreen playURL:link.mediaURL title:link.title startTime:link.startTime];
     return YES;
 }
 

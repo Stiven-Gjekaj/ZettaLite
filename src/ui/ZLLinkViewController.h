@@ -3,5 +3,5 @@
 #import <UIKit/UIKit.h>
 
 @interface ZLLinkViewController : UIViewController
-- (void)playURL:(NSURL *)url title:(NSString *)title;
+- (void)playURL:(NSURL *)url title:(NSString *)title startTime:(double)startTime;
 @end

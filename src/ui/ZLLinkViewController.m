@@ -81,12 +81,14 @@
         return;
     }
     [self.field resignFirstResponder];
-    [self playURL:url title:nil];
+    [self playURL:url title:nil startTime:0];
 }
 
-- (void)playURL:(NSURL *)url title:(NSString *)title {
+- (void)playURL:(NSURL *)url title:(NSString *)title startTime:(double)startTime {
     self.field.text = url.absoluteString;
-    [ZLPlayback play:[ZLPlayItem itemWithURL:url title:title ?: url.lastPathComponent] from:self];
+    ZLPlayItem *item = [ZLPlayItem itemWithURL:url title:title ?: url.lastPathComponent];
+    item.startTime = startTime;
+    [ZLPlayback play:item from:self];
 }
 
 @end
