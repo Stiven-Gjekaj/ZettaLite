@@ -36,10 +36,36 @@ You need an iPhone, iPod touch, or iPad with iOS 6 and a jailbreak.
 
 To remove the app: `dpkg -r io.github.stivengjekaj.zettalite`.
 
-## Play a link
+## Add your sources
 
-Paste a link into the box of the app, and press Play. Other apps and Safari
-bookmarklets can open `zettalite://play?url=URL`, with URL percent-encoded.
+ZettaLite comes with no sources. Open Settings, then Sources, paste your
+list, and press Save. Put one link on each line:
+
+| Line | Example | Gives |
+| ---- | ------- | ----- |
+| A Stremio addon | `https://.../manifest.json` | Catalogs, titles, streams, subtitles |
+| An IPTV playlist | `https://.../playlist.m3u` | Live channels |
+| A media link | `https://.../film.mkv` | One video |
+
+The new list replaces the old list. The order of the lines sets the order of
+the rows on Home.
+
+ZettaLite plays HTTP streams only. A torrent addon gives HTTP links when you
+add a debrid key in its settings.
+
+## Links from other apps
+
+Other apps and Safari bookmarklets can open these links. Each value is
+percent-encoded.
+
+| Link | Does |
+| ---- | ---- |
+| `zettalite://play?url=URL&t=SECONDS` | Plays URL, from SECONDS |
+| `zettalite://title?type=TYPE&id=ID` | Opens the page of a title, for example `type=movie&id=tt0111161` |
+| `zettalite://search?q=TEXT` | Searches in all addons |
+| `zettalite://tab?name=NAME` | Opens `home`, `search`, `library`, `live`, or `settings` |
+
+Settings, Play a link plays one pasted link.
 
 ## Build
 
