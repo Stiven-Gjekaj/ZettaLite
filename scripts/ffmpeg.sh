@@ -32,6 +32,13 @@ sed -i '' 's/ldpic           \\rd, \.Lpic\\@, indir=1/ldpic           \\rd, Lnlp
     "$SRC/libavutil/arm/asm.S"
 perl -0pi -e 's/(\.non_lazy_symbol_pointer\n)\.Lpic\\@:/$1Lnlp\\@:/' "$SRC/libavutil/arm/asm.S"
 
+# The DASH demuxer opens each URL with its own HTTP code, not with the io_open
+# hook of the app. Make it use the hook, as the HLS demuxer does, so that the
+# app fetches each segment with its headers and its trust.
+perl -pi -e 's/ret = ffio_open_whitelist\(pb, url, AVIO_FLAG_READ, c->interrupt_callback, &tmp, s->protocol_whitelist, s->protocol_blacklist\);/ret = s->io_open(s, pb, url, AVIO_FLAG_READ, &tmp);/;
+    s/ret = ffio_open_whitelist\(&in, url, AVIO_FLAG_READ, c->interrupt_callback, &opts, s->protocol_whitelist, s->protocol_blacklist\);/ret = s->io_open(s, &in, url, AVIO_FLAG_READ, &opts);/;
+    s/^        avio_close\(in\);/        ff_format_io_close(s, &in);/' "$SRC/libavformat/dashdec.c"
+
 TARGET="-target armv7-apple-ios6.0 -isysroot $SDK -Wno-incompatible-sysroot"
 STAGE="$ROOT/build/ffmpeg-stage"
 rm -rf "$STAGE"
