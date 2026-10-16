@@ -2,6 +2,7 @@
 #import <CommonCrypto/CommonDigest.h>
 #import <ImageIO/ImageIO.h>
 #import "ZLHTTPStream.h"
+#import "ZLWebP.h"
 
 // The disk cache keeps this many bytes. Older files go first.
 static const unsigned long long ZLDiskLimit = 60 * 1024 * 1024;
@@ -58,13 +59,18 @@ static NSString *ZLHash(NSString *text) {
 // Decodes the image with its largest side at most pixels. ImageIO decodes a
 // small JPEG directly, so a large poster uses little memory.
 static UIImage *ZLDecode(NSData *data, CGFloat pixels, CGFloat scale) {
-    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
-    if (!source) return nil;
-    NSDictionary *options = @{ (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
-                               (id)kCGImageSourceCreateThumbnailWithTransform: @YES,
-                               (id)kCGImageSourceThumbnailMaxPixelSize: @(pixels) };
-    CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, (__bridge CFDictionaryRef)options);
-    CFRelease(source);
+    CGImageRef image = NULL;
+    if (ZLIsWebP(data)) {
+        image = ZLCreateImageFromWebP(data, pixels);
+    } else {
+        CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
+        if (!source) return nil;
+        NSDictionary *options = @{ (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+                                   (id)kCGImageSourceCreateThumbnailWithTransform: @YES,
+                                   (id)kCGImageSourceThumbnailMaxPixelSize: @(pixels) };
+        image = CGImageSourceCreateThumbnailAtIndex(source, 0, (__bridge CFDictionaryRef)options);
+        CFRelease(source);
+    }
     if (!image) return nil;
     // Draw it one time here, so that the main thread does not decode it.
     size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
