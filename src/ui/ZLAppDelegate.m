@@ -1,14 +1,25 @@
 #import "ZLAppDelegate.h"
 #import <AVFoundation/AVFoundation.h>
+#import "ZLAddonManager.h"
 #import "ZLHLSServer.h"
+#import "ZLHomeViewController.h"
 #import "ZLLink.h"
-#import "ZLLinkViewController.h"
 #import "ZLNavigationController.h"
+#import "ZLPlaceholderViewController.h"
+#import "ZLPlayback.h"
+#import "ZLSearchViewController.h"
+#import "ZLSettingsViewController.h"
+#import "ZLTabBarController.h"
 #import "ZLTheme.h"
+#import "ZLTitleViewController.h"
 #include <libavutil/log.h>
 
+NSString *const ZLShowSourcesNotification = @"ZLShowSources";
+
 @interface ZLAppDelegate ()
-@property (nonatomic, strong) ZLLinkViewController *linkScreen;
+@property (nonatomic, strong) ZLTabBarController *tabs;
+@property (nonatomic, strong) ZLSettingsViewController *settings;
+@property (nonatomic, strong) ZLSearchViewController *search;
 @end
 
 @implementation ZLAppDelegate
@@ -21,13 +32,34 @@
     ZLApplyTheme();
 
     self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    self.window.backgroundColor = ZLBackgroundColor();
-    self.linkScreen = [ZLLinkViewController new];
-    self.window.rootViewController = [[ZLNavigationController alloc] initWithRootViewController:self.linkScreen];
+    self.window.backgroundColor = [UIColor blackColor];
+    self.settings = [ZLSettingsViewController new];
+    self.search = [ZLSearchViewController new];
+    self.tabs = [ZLTabBarController new];
+    self.tabs.viewControllers = @[
+        [[ZLNavigationController alloc] initWithRootViewController:[ZLHomeViewController new]],
+        [[ZLNavigationController alloc] initWithRootViewController:self.search],
+        [[ZLNavigationController alloc] initWithRootViewController:
+            [[ZLPlaceholderViewController alloc] initWithTitle:@"Library" image:@"Tab-library" tag:2
+                                                          text:@"Continue watching and the watchlist come in version 0.5."]],
+        [[ZLNavigationController alloc] initWithRootViewController:
+            [[ZLPlaceholderViewController alloc] initWithTitle:@"Live TV" image:@"Tab-live" tag:3
+                                                          text:@"The channels of M3U playlists come in version 0.6."]],
+        [[ZLNavigationController alloc] initWithRootViewController:self.settings],
+    ];
+    self.window.rootViewController = self.tabs;
     [self.window makeKeyAndVisible];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(showSources)
+                                                 name:ZLShowSourcesNotification object:nil];
+    [[ZLAddonManager shared] reload];
     // iOS calls application:openURL: after this method for a launch from a
     // link, so this method does not open the link.
     return YES;
+}
+
+- (void)showSources {
+    self.tabs.selectedIndex = 4;
+    [self.settings showSources];
 }
 
 - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication
@@ -35,8 +67,33 @@
     ZLLink *link = ZLParseLink(url);
     if (!link) return NO;
     // A link can come while a player shows. Close it first.
-    [self.window.rootViewController dismissViewControllerAnimated:NO completion:nil];
-    [self.linkScreen playURL:link.mediaURL title:link.title startTime:link.startTime];
+    [self.tabs dismissViewControllerAnimated:NO completion:nil];
+    NSArray *names = @[ @"home", @"search", @"library", @"live", @"settings" ];
+    switch (link.kind) {
+        case ZLLinkTab:
+            self.tabs.selectedIndex = [names indexOfObject:link.text];
+            break;
+        case ZLLinkSearch:
+            self.tabs.selectedIndex = 1;
+            [self.search.navigationController popToRootViewControllerAnimated:NO];
+            [self.search searchFor:link.text];
+            break;
+        case ZLLinkTitle: {
+            ZLMeta *meta = [ZLMeta metaWithJSON:@{ @"id": link.identifier, @"type": link.type, @"name": link.identifier }];
+            self.tabs.selectedIndex = 0;
+            UINavigationController *home = (UINavigationController *)self.tabs.selectedViewController;
+            [home pushViewController:[[ZLTitleViewController alloc] initWithMeta:meta] animated:NO];
+            break;
+        }
+        case ZLLinkPlay: {
+            ZLPlayItem *item = [ZLPlayItem itemWithURL:link.mediaURL title:link.title ?: link.mediaURL.lastPathComponent];
+            item.startTime = link.startTime;
+            UIViewController *visible = self.tabs.selectedViewController;
+            if ([visible isKindOfClass:[UINavigationController class]]) visible = ((UINavigationController *)visible).topViewController;
+            [ZLPlayback play:item from:visible];
+            break;
+        }
+    }
     return YES;
 }
 
