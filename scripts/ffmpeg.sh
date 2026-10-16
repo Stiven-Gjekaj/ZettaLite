@@ -39,6 +39,12 @@ perl -pi -e 's/ret = ffio_open_whitelist\(pb, url, AVIO_FLAG_READ, c->interrupt_
     s/ret = ffio_open_whitelist\(&in, url, AVIO_FLAG_READ, c->interrupt_callback, &opts, s->protocol_whitelist, s->protocol_blacklist\);/ret = s->io_open(s, &in, url, AVIO_FLAG_READ, &opts);/;
     s/^        avio_close\(in\);/        ff_format_io_close(s, &in);/' "$SRC/libavformat/dashdec.c"
 
+# The NEON synthesis filter of DTS keeps a pointer in r9 across a call to a
+# C function. On iOS, r9 is a scratch register, so the C function can change
+# it, and the decoder then crashes. Save r9 around the call.
+perl -0pi -e 's/(VFP     vpush           \{d0\}\n)(        blx             r12\n)(VFP     vpop            \{d0\}\n)/        push            {r9}\n$1$2$3        pop             {r9}\n/ unless /push            \{r9\}/' \
+    "$SRC/libavcodec/arm/synth_filter_neon.S"
+
 TARGET="-target armv7-apple-ios6.0 -isysroot $SDK -Wno-incompatible-sysroot"
 STAGE="$ROOT/build/ffmpeg-stage"
 rm -rf "$STAGE"
