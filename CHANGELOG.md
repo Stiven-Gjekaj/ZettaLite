@@ -4,6 +4,29 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 0.3.0 (2026-10-17)
+
+Stremio addons.
+
+- Five tabs: Home, Search, Library, Live TV, and Settings. Library and Live
+  TV fill in 0.5 and 0.6.
+- Settings, Sources: paste a list with one link on each line. A Stremio
+  addon (`manifest.json`) gives catalogs, titles, and streams. The list shows
+  each addon that loaded and each link that failed.
+- Home shows a banner of featured titles and one row of posters for each
+  catalog. A filter at the top shows all rows, the films, the series, or the
+  other types. A tap on the name of a row shows all of its titles in a grid,
+  with more pages and a genre filter.
+- Search asks each addon with search at the same time.
+- The page of a title shows the picture, the facts, the genres, the
+  description, the director, the cast, the seasons and the episodes, and
+  "More like this".
+- Play shows the HTTP streams of all addons. Torrent streams do not show.
+- WebP posters show. iOS 6 cannot decode WebP, so FFmpeg does it.
+- New links: `zettalite://title?type=TYPE&id=ID`, `zettalite://search?q=TEXT`,
+  and `zettalite://tab?name=NAME`.
+- The app uses the Karla font of ZettaStream.
+
 ## 0.2.0 (2026-10-17)
 
 The own player.
