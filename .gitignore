@@ -6,3 +6,4 @@ sdks/
 
 # The OS
 .DS_Store
+build/
