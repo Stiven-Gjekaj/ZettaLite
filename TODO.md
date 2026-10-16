@@ -3,12 +3,14 @@
 Each release adds one big part. The risky media work comes first. The reason
 for each choice is in [docs/decisions.md](docs/decisions.md).
 
-## 0.1: the link player
+## 0.1: the link player (done, 2026-10-17)
 
 - Copy the newer `build.sh` and `fix-sdk.sh` from RetroTube.
 - Copy the scripts, the packaging, and the RTTest runner, with the prefix `ZL`.
 - Build FFmpeg 7.1 LGPL for armv7 iOS 6 as a dylib. Use 6.0 if 7.1 blocks.
 - Copy `RTHLSServer` and the segment cache as `ZLHLSServer`.
+- Speak TLS with mbedTLS and the Mozilla root list, because the TLS of iOS 6
+  fails with many servers.
 - Remux MKV, WebM, MP4, fragmented MP4, MPEG-TS, and DASH with H.264 into
   TS segments for the system player.
 - Add the box for one link and the `zettalite://play?url=` scheme.
@@ -16,6 +18,8 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 
 ## 0.2: software decode
 
+- Build dav1d for armv7, because the AV1 decoder of FFmpeg needs a hardware
+  decoder.
 - Convert AC3, E-AC3, DTS, TrueHD, Opus, Vorbis, and FLAC to stereo AAC.
   Use the hardware AudioConverter, with the FFmpeg AAC encoder as the
   fallback.
