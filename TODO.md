@@ -37,7 +37,7 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
   seasons, episodes, cast, and "More like this".
 - Show "Add a source in Settings" when there are no sources.
 
-## 0.4: streams
+## 0.4: streams (done, 2026-10-17)
 
 - Ask all addons for streams at the same time.
 - Hide torrent streams. Show the message about a debrid key.
