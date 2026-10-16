@@ -52,7 +52,9 @@ PC
 chmod +x "$STAGE/pkg-config"
 
 # The decoders, demuxers, and parsers are all the LGPL ones of FFmpeg.
-# The app fetches each URL itself, so FFmpeg has no network and no TLS.
+# The app fetches each URL itself through its io_open hook, so FFmpeg has
+# no TLS. The HLS and DASH demuxers still check that an http protocol exists
+# before they call the hook, so the http protocol stays in the build.
 "$SRC/configure" \
     --prefix="$STAGE/install" \
     --enable-cross-compile --target-os=darwin --arch=arm --cpu=cortex-a9 \
@@ -62,7 +64,7 @@ chmod +x "$STAGE/pkg-config"
     --enable-static --disable-shared --enable-pic \
     --disable-programs --disable-doc --disable-debug \
     --disable-avdevice --disable-avfilter --disable-postproc \
-    --disable-network --disable-protocols --enable-protocol=file \
+    --disable-protocols --enable-protocol=file,http,tcp \
     --disable-encoders --enable-encoder=aac \
     --disable-muxers --enable-muxer=mpegts \
     --disable-videotoolbox --disable-audiotoolbox --disable-securetransport \
@@ -77,6 +79,13 @@ chmod +x "$STAGE/pkg-config"
 for name in CLOCK_GETTIME; do
     sed -i '' "s/^#define HAVE_$name 1/#define HAVE_$name 0/" config.h
 done
+
+# The https protocol needs a TLS library. The app never lets FFmpeg open a
+# URL, so the https protocol only has to exist for the check of the
+# demuxers. Turn it on without TLS.
+sed -i '' 's/^#define CONFIG_HTTPS_PROTOCOL 0/#define CONFIG_HTTPS_PROTOCOL 1/' config_components.h
+sed -i '' 's/^    &ff_http_protocol,/&\
+    \&ff_https_protocol,/' libavformat/protocol_list.c
 
 make -j"$(sysctl -n hw.ncpu)" >"$STAGE/make.log" 2>&1 || { grep -m 20 -B2 -A5 'error' "$STAGE/make.log"; exit 1; }
 make install >/dev/null
