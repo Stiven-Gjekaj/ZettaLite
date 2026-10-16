@@ -22,7 +22,7 @@ mkdir -p "$APP"
     "$FFMPEG/lib/libzlffmpeg.dylib" "$TLS/ios/libmbedtls.a" -lz \
     -framework Foundation -framework UIKit -framework CoreGraphics -framework QuartzCore \
     -framework MediaPlayer -framework AVFoundation -framework CoreMedia -framework Security \
-    -framework AudioToolbox -framework OpenGLES 2>&1 | grep -v 'liblaunch.dylib' >&2 || true
+    -framework AudioToolbox -framework OpenGLES -framework ImageIO 2>&1 | grep -v 'liblaunch.dylib' >&2 || true
 [ -f "$APP/ZettaLite" ]
 
 cp "$FFMPEG/lib/libzlffmpeg.dylib" "$APP/"
