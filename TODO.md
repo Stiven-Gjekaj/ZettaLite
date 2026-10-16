@@ -16,13 +16,13 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 - Add the box for one link and the `zettalite://play?url=` scheme.
 - Ask one time for each host that fails the trust check.
 
-## 0.2: software decode
+## 0.2: software decode (done, 2026-10-17)
 
 - Build dav1d for armv7, because the AV1 decoder of FFmpeg needs a hardware
   decoder.
 - Convert AC3, E-AC3, DTS, TrueHD, Opus, Vorbis, and FLAC to stereo AAC.
-  Use the hardware AudioConverter, with the FFmpeg AAC encoder as the
-  fallback.
+  Use the software AudioConverter of Apple, with the FFmpeg AAC encoder as
+  the fallback.
 - Add the own player for HEVC, VP9, AV1, MPEG-2, and MPEG-4 ASP: FFmpeg on
   2 threads, OpenGL ES 2, and AudioQueue.
 - Measure the real limit of each codec on the phone, and put it in the table.
