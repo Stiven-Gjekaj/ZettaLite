@@ -10,7 +10,13 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT="$ROOT/build/tests"
 FFMPEG="$ROOT/build/ffmpeg"
+TLS="$ROOT/build/mbedtls"
 mkdir -p "$OUT"
+if [ ! -f "$TLS/mac/libmbedtls.a" ]; then
+    "$ROOT/scripts/mbedtls.sh" >/dev/null
+fi
+# The tests find the root certificates next to the test program.
+cp "$ROOT/resources/cacert.pem" "$OUT/"
 CORE=$(ls "$ROOT"/src/core/*.m 2>/dev/null || true)
 CORE_TESTS=$(ls "$ROOT"/tests/*.m "$ROOT"/tests/core/*.m 2>/dev/null || true)
 
@@ -23,12 +29,13 @@ if [ "$1" = "--phone" ]; then
     MEDIA_TESTS=$(ls "$ROOT"/tests/media/*.m 2>/dev/null || true)
     # shellcheck disable=SC2086
     "$ROOT/build.sh" "$OUT/zltests-armv7" -I"$ROOT/src/core" -I"$ROOT/src/media" -I"$ROOT/tests" -I"$FFMPEG/include" \
-        $CORE $MEDIA $CORE_TESTS $MEDIA_TESTS "$FFMPEG/lib/libzlffmpeg.dylib" \
+        -I"$TLS/include" -I"$ROOT/src/tls" $CORE $MEDIA $CORE_TESTS $MEDIA_TESTS "$FFMPEG/lib/libzlffmpeg.dylib" \
+        "$TLS/ios/libmbedtls.a" -lz \
         -framework Foundation -framework Security -framework AudioToolbox >"$OUT/build.log" 2>&1 ||
         { grep -v 'liblaunch.dylib' "$OUT/build.log" >&2; exit 1; }
     ssh iphone4s 'mkdir -p /tmp/zltests'
     scp -q "$OUT/zltests-armv7" iphone4s:/tmp/zltests/zltests
-    scp -q "$FFMPEG/lib/libzlffmpeg.dylib" iphone4s:/tmp/zltests/
+    scp -q "$FFMPEG/lib/libzlffmpeg.dylib" "$ROOT/resources/cacert.pem" iphone4s:/tmp/zltests/
     if [ ! -d "$ROOT/build/fixtures" ]; then
         "$ROOT/scripts/fixtures.sh" >/dev/null
     fi
@@ -40,7 +47,8 @@ if [ "$1" = "--phone" ]; then
         ZL_LIVE=${ZL_LIVE:-} ./zltests $*"
 else
     # shellcheck disable=SC2086
-    clang -fobjc-arc -Wall -Werror -mmacosx-version-min=10.9 -I"$ROOT/src/core" -I"$ROOT/tests" $CORE $CORE_TESTS \
+    clang -fobjc-arc -Wall -Werror -mmacosx-version-min=10.9 -I"$ROOT/src/core" -I"$ROOT/tests" \
+        -I"$TLS/include" -I"$ROOT/src/tls" $CORE $CORE_TESTS "$TLS/mac/libmbedtls.a" -lz \
         -framework Foundation -framework Security -o "$OUT/zltests"
     "$OUT/zltests" "$@"
 fi
