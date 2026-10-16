@@ -62,6 +62,7 @@ percent-encoded.
 | ---- | ---- |
 | `zettalite://play?url=URL&t=SECONDS` | Plays URL, from SECONDS |
 | `zettalite://title?type=TYPE&id=ID` | Opens the page of a title, for example `type=movie&id=tt0111161` |
+| `zettalite://watch?type=TYPE&id=ID` | Plays the best stream of a title, or of an episode with `id=tt0944947:1:2` |
 | `zettalite://search?q=TEXT` | Searches in all addons |
 | `zettalite://tab?name=NAME` | Opens `home`, `search`, `library`, `live`, or `settings` |
 
