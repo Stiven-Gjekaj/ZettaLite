@@ -39,6 +39,9 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
 @property (nonatomic, strong) NSDictionary *failures;
 @property (nonatomic, strong) NSMutableDictionary *catalogCache;
 @property (nonatomic) NSUInteger generation;
+// The requests that wait for the manifests that load now.
+@property (nonatomic, strong) NSMutableArray *waiting;
+@property (nonatomic) BOOL loading;
 @end
 
 @implementation ZLAddonManager
@@ -55,6 +58,7 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
         _addons = @[];
         _failures = @{};
         _catalogCache = [NSMutableDictionary dictionary];
+        _waiting = [NSMutableArray array];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload)
                                                      name:ZLSourcesDidChangeNotification object:nil];
     }
@@ -73,7 +77,12 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
         if ([manifest isKindOfClass:[NSDictionary class]]) manifests[source.URL.absoluteString] = manifest;
     }
     [self buildFrom:manifests sources:sources failures:@{}];
-    if (!sources.count) return;
+    if (!sources.count) {
+        [self finishLoading];
+        return;
+    }
+    // A request for a manifest that is not on the phone waits for the load.
+    self.loading = manifests.count < sources.count;
 
     // Get each manifest again, so that a change of an addon shows.
     __block NSUInteger left = sources.count;
@@ -90,9 +99,23 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
             if (--left == 0) {
                 [[ZLStore shared] setObject:manifests named:@"manifests"];
                 [self buildFrom:manifests sources:sources failures:failures];
+                [self finishLoading];
             }
         });
     }
+}
+
+- (void)finishLoading {
+    self.loading = NO;
+    NSArray *waiting = [self.waiting copy];
+    [self.waiting removeAllObjects];
+    for (void (^block)(void) in waiting) block();
+}
+
+// Runs the block now, or after the manifests that load now.
+- (void)whenReady:(void (^)(void))block {
+    if (self.loading) [self.waiting addObject:[block copy]];
+    else block();
 }
 
 - (void)buildFrom:(NSDictionary *)manifests sources:(NSArray *)sources failures:(NSDictionary *)failures {
@@ -146,6 +169,10 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
 }
 
 - (void)search:(NSString *)text each:(void (^)(ZLCatalog *, NSArray *))each done:(void (^)(void))done {
+    if (self.loading) {
+        [self whenReady:^{ [self search:text each:each done:done]; }];
+        return;
+    }
     NSMutableArray *catalogs = [NSMutableArray array];
     for (ZLAddon *addon in self.addons) {
         for (ZLCatalog *catalog in addon.catalogs) {
@@ -167,6 +194,10 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
 
 - (void)loadMeta:(NSString *)type identifier:(NSString *)identifier
       completion:(void (^)(ZLMeta *, NSError *))completion {
+    if (self.loading) {
+        [self whenReady:^{ [self loadMeta:type identifier:identifier completion:completion]; }];
+        return;
+    }
     NSMutableArray *addons = [NSMutableArray array];
     for (ZLAddon *addon in self.addons) {
         if ([addon supportsResource:@"meta" type:type identifier:identifier]) [addons addObject:addon];
@@ -196,6 +227,10 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
 - (void)loadStreams:(NSString *)type identifier:(NSString *)identifier
                each:(void (^)(ZLAddon *, NSArray *, NSError *))each
                done:(void (^)(void))done {
+    if (self.loading) {
+        [self whenReady:^{ [self loadStreams:type identifier:identifier each:each done:done]; }];
+        return;
+    }
     NSMutableArray *addons = [NSMutableArray array];
     for (ZLAddon *addon in self.addons) {
         if ([addon supportsResource:@"stream" type:type identifier:identifier]) [addons addObject:addon];
@@ -222,6 +257,10 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
 }
 
 - (void)loadSubtitles:(NSString *)type identifier:(NSString *)identifier completion:(void (^)(NSArray *))completion {
+    if (self.loading) {
+        [self whenReady:^{ [self loadSubtitles:type identifier:identifier completion:completion]; }];
+        return;
+    }
     NSMutableArray *addons = [NSMutableArray array];
     for (ZLAddon *addon in self.addons) {
         if ([addon supportsResource:@"subtitles" type:type identifier:identifier]) [addons addObject:addon];
