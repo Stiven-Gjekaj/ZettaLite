@@ -130,6 +130,12 @@ static const int ZLCountdownSeconds = 10;
     ZLLog(@"closed %@ at %.0f of %.0f, ended %d", video, position, duration, ended);
     if (ended) [[ZLLibrary shared] setVideo:video ofMeta:meta watched:YES];
     else if (position > 0) [[ZLLibrary shared] recordMeta:meta video:video position:position duration:duration];
+    // A play from a link can start before the full title loads. Get it for the library.
+    if (!meta.poster) {
+        [[ZLAddonManager shared] loadMeta:meta.type identifier:meta.identifier completion:^(ZLMeta *full, NSError *error) {
+            if (full) [[ZLLibrary shared] updateMeta:full];
+        }];
+    }
     if (!ended || !episode || ![ZLSettings shared].playNextEpisode) return;
     // The library copy has the episodes, also when the page played before the
     // full title loaded. Without them, ask the addons.
