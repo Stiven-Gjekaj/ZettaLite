@@ -1,5 +1,6 @@
 #import "ZLSettingsViewController.h"
 #import "ZLAddonManager.h"
+#import "ZLLibrary.h"
 #import "ZLLinkViewController.h"
 #import "ZLLog.h"
 #import "ZLSettings.h"
@@ -263,6 +264,108 @@
 
 @end
 
+#pragma mark - Backup
+
+// A backup holds the library, the sources, the trusted hosts, and the settings.
+// It goes to the clipboard and to Documents, where iTunes File Sharing shows it.
+@interface ZLBackupViewController : UITableViewController <UIAlertViewDelegate>
+@end
+
+@implementation ZLBackupViewController
+
++ (NSString *)backupPath {
+    NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    return [documents stringByAppendingPathComponent:@"ZettaLite-backup.json"];
+}
+
++ (NSDictionary *)backup {
+    ZLSettings *settings = [ZLSettings shared];
+    NSMutableDictionary *values = [NSMutableDictionary dictionary];
+    values[@"autoplay"] = @(settings.autoplay);
+    values[@"showHeavyStreams"] = @(settings.showHeavyStreams);
+    values[@"playNextEpisode"] = @(settings.playNextEpisode);
+    values[@"subtitleSize"] = @(settings.subtitleSize);
+    if (settings.audioLanguage) values[@"audioLanguage"] = settings.audioLanguage;
+    if (settings.subtitleLanguage) values[@"subtitleLanguage"] = settings.subtitleLanguage;
+    return @{ @"app": @"ZettaLite", @"version": @1, @"library": [[ZLLibrary shared] backup],
+              @"sources": [[ZLSourceList shared] text], @"trustedHosts": [[ZLTrust shared] hosts], @"settings": values };
+}
+
++ (BOOL)restore:(NSDictionary *)backup {
+    if (![backup isKindOfClass:[NSDictionary class]] || ![backup[@"app"] isEqual:@"ZettaLite"]) return NO;
+    if (![[ZLLibrary shared] restore:backup[@"library"]]) return NO;
+    if ([backup[@"sources"] isKindOfClass:[NSString class]]) [[ZLSourceList shared] setText:backup[@"sources"]];
+    for (id host in backup[@"trustedHosts"]) {
+        if ([host isKindOfClass:[NSString class]]) [[ZLTrust shared] trustHost:host];
+    }
+    NSDictionary *values = backup[@"settings"];
+    if ([values isKindOfClass:[NSDictionary class]]) {
+        ZLSettings *settings = [ZLSettings shared];
+        if (values[@"autoplay"]) settings.autoplay = [values[@"autoplay"] boolValue];
+        if (values[@"showHeavyStreams"]) settings.showHeavyStreams = [values[@"showHeavyStreams"] boolValue];
+        if (values[@"playNextEpisode"]) settings.playNextEpisode = [values[@"playNextEpisode"] boolValue];
+        if (values[@"subtitleSize"]) settings.subtitleSize = [values[@"subtitleSize"] doubleValue];
+        settings.audioLanguage = [values[@"audioLanguage"] isKindOfClass:[NSString class]] ? values[@"audioLanguage"] : nil;
+        settings.subtitleLanguage = [values[@"subtitleLanguage"] isKindOfClass:[NSString class]] ? values[@"subtitleLanguage"] : nil;
+    }
+    return YES;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Backup";
+    self.tableView.backgroundView = nil;
+    self.tableView.backgroundColor = ZLBackgroundColor();
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return 3;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    return @"A backup holds the library, the sources, the trusted hosts, and the settings. It goes to the clipboard, "
+           @"and to ZettaLite-backup.json in the files of the app in iTunes. A restore replaces the library and the sources.";
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+    cell.backgroundColor = ZLSurfaceColor();
+    cell.textLabel.textColor = indexPath.row == 0 ? ZLAccentColor() : ZLTextColor();
+    cell.textLabel.font = ZLBoldFont(15);
+    NSArray *titles = @[ @"Make a backup", @"Restore from the clipboard", @"Restore from the backup file" ];
+    cell.textLabel.text = titles[(NSUInteger)indexPath.row];
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.row == 0) {
+        NSData *data = [NSJSONSerialization dataWithJSONObject:[ZLBackupViewController backup] options:NSJSONWritingPrettyPrinted error:NULL];
+        [data writeToFile:[ZLBackupViewController backupPath] atomically:YES];
+        [UIPasteboard generalPasteboard].string = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        [[[UIAlertView alloc] initWithTitle:@"Backup made" message:@"The backup is in the clipboard and in the files of the app."
+                                   delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] show];
+        return;
+    }
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Restore?" message:@"The backup replaces the library and the sources."
+                                                   delegate:self cancelButtonTitle:@"Cancel" otherButtonTitles:@"Restore", nil];
+    alert.tag = indexPath.row;
+    [alert show];
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if (buttonIndex == alertView.cancelButtonIndex) return;
+    NSData *data = alertView.tag == 1 ? [[UIPasteboard generalPasteboard].string dataUsingEncoding:NSUTF8StringEncoding]
+                                      : [NSData dataWithContentsOfFile:[ZLBackupViewController backupPath]];
+    id backup = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+    BOOL ok = [ZLBackupViewController restore:backup];
+    [[[UIAlertView alloc] initWithTitle:ok ? @"Restored" : @"No backup"
+                                message:ok ? @"The library, the sources, and the settings are back." : @"The app found no ZettaLite backup there."
+                               delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] show];
+}
+
+@end
+
 #pragma mark - Settings
 
 typedef NS_ENUM(NSInteger, ZLSettingsRow) {
@@ -270,6 +373,7 @@ typedef NS_ENUM(NSInteger, ZLSettingsRow) {
     ZLSettingsPlayback,
     ZLSettingsLink,
     ZLSettingsHosts,
+    ZLSettingsBackup,
     ZLSettingsDiagnostics,
     ZLSettingsVersion,
     ZLSettingsRowCount,
@@ -323,6 +427,9 @@ typedef NS_ENUM(NSInteger, ZLSettingsRow) {
             cell.textLabel.text = @"Trusted hosts";
             cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu", (unsigned long)[[ZLTrust shared] hosts].count];
             break;
+        case ZLSettingsBackup:
+            cell.textLabel.text = @"Backup and restore";
+            break;
         case ZLSettingsDiagnostics:
             cell.textLabel.text = @"Diagnostics";
             break;
@@ -351,6 +458,7 @@ typedef NS_ENUM(NSInteger, ZLSettingsRow) {
         case ZLSettingsPlayback: next = [[ZLPlaybackSettingsViewController alloc] initWithStyle:UITableViewStyleGrouped]; break;
         case ZLSettingsLink: next = [ZLLinkViewController new]; break;
         case ZLSettingsHosts: next = [[ZLHostsViewController alloc] initWithStyle:UITableViewStyleGrouped]; break;
+        case ZLSettingsBackup: next = [[ZLBackupViewController alloc] initWithStyle:UITableViewStyleGrouped]; break;
         case ZLSettingsDiagnostics: next = [ZLDiagnosticsViewController new]; break;
         default: break;
     }
