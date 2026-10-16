@@ -4,13 +4,14 @@
 #import "ZLInput.h"
 
 typedef NS_ENUM(NSInteger, ZLRoute) {
+    // The app cannot play the input. It is the zero value, so that a nil
+    // info gives no route.
+    ZLRouteNone,
     // The system player plays the video with its hardware decoder. FFmpeg
     // only remuxes it, and changes the audio to AAC when it must.
     ZLRouteSystem,
     // The own player decodes the video in software.
     ZLRouteSoftware,
-    // The app cannot play the input.
-    ZLRouteNone,
 };
 
 @interface ZLTrack : NSObject

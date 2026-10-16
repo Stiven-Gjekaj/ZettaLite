@@ -157,7 +157,7 @@ static ZLPlayback *ZLCurrentPlayback;
         self.input = input;
         ZLMediaInfo *info = input ? [ZLMediaInfo infoForInput:input languages:[self preferredLanguages]] : nil;
         ZLRemuxSession *session = nil;
-        if (info.route == ZLRouteSystem) {
+        if (input && info.route == ZLRouteSystem) {
             session = [[ZLRemuxSession alloc] initWithInput:input info:info audioIndex:-1];
             if (![session prepare:&error]) session = nil;
             ZLLog(@"prepare %@, %lu segments", session ? @"done" : error.localizedDescription, (unsigned long)session.segmentCount);
