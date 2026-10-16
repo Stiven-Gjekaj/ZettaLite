@@ -78,11 +78,23 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
             [self.search.navigationController popToRootViewControllerAnimated:NO];
             [self.search searchFor:link.text];
             break;
-        case ZLLinkTitle: {
-            ZLMeta *meta = [ZLMeta metaWithJSON:@{ @"id": link.identifier, @"type": link.type, @"name": link.identifier }];
+        case ZLLinkTitle:
+        case ZLLinkWatch: {
+            // An episode ID is the ID of the series, then the season and the episode.
+            NSString *titleID = link.identifier;
+            ZLEpisode *episode = nil;
+            NSArray *parts = [link.identifier componentsSeparatedByString:@":"];
+            if ([link.type isEqualToString:@"series"] && parts.count >= 3) {
+                titleID = [[parts subarrayWithRange:NSMakeRange(0, parts.count - 2)] componentsJoinedByString:@":"];
+                episode = [ZLEpisode episodeWithJSON:@{ @"id": link.identifier, @"season": parts[parts.count - 2],
+                                                        @"episode": parts[parts.count - 1] }];
+            }
+            ZLMeta *meta = [ZLMeta metaWithJSON:@{ @"id": titleID, @"type": link.type, @"name": titleID }];
             self.tabs.selectedIndex = 0;
             UINavigationController *home = (UINavigationController *)self.tabs.selectedViewController;
-            [home pushViewController:[[ZLTitleViewController alloc] initWithMeta:meta] animated:NO];
+            ZLTitleViewController *page = [[ZLTitleViewController alloc] initWithMeta:meta];
+            [home pushViewController:page animated:NO];
+            if (link.kind == ZLLinkWatch) [page playEpisode:episode];
             break;
         }
         case ZLLinkPlay: {

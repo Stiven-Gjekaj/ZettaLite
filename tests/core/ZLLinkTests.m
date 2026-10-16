@@ -15,6 +15,9 @@ ZL_TEST(test_link_reads_title_search_and_tab_links) {
     ZL_EQUAL_INT(link.kind, ZLLinkTitle);
     ZL_EQUAL(link.type, @"series");
     ZL_EQUAL(link.identifier, @"tt0944947");
+    link = ZLParseLink([NSURL URLWithString:@"zettalite://watch?type=series&id=tt0944947%3A1%3A2"]);
+    ZL_EQUAL_INT(link.kind, ZLLinkWatch);
+    ZL_EQUAL(link.identifier, @"tt0944947:1:2");
     link = ZLParseLink([NSURL URLWithString:@"zettalite://search?q=the%20matrix"]);
     ZL_EQUAL_INT(link.kind, ZLLinkSearch);
     ZL_EQUAL(link.text, @"the matrix");

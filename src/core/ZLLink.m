@@ -40,9 +40,9 @@ ZLLink *ZLParseLink(NSURL *url) {
         link.mediaURL = media;
         link.title = query[@"title"];
         link.startTime = MAX(0, [query[@"t"] doubleValue]);
-    } else if ([host isEqualToString:@"title"]) {
+    } else if ([host isEqualToString:@"title"] || [host isEqualToString:@"watch"]) {
         if (![query[@"type"] length] || ![query[@"id"] length]) return nil;
-        link.kind = ZLLinkTitle;
+        link.kind = [host isEqualToString:@"title"] ? ZLLinkTitle : ZLLinkWatch;
         link.type = query[@"type"];
         link.identifier = query[@"id"];
     } else if ([host isEqualToString:@"search"]) {
