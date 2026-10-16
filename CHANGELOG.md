@@ -4,6 +4,33 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 0.5.0 (2026-10-17)
+
+The library.
+
+- The Library tab shows Continue watching, New episodes, and the
+  watchlist. A tap on a title in Continue watching or New episodes plays it
+  at once.
+- Home starts with Continue watching and New episodes.
+- A film or an episode starts where it stopped. It counts as watched after
+  90%.
+- Play on a series plays the next episode to watch, and says which one, for
+  example "Play S1 E3". A film with progress says Resume.
+- At the end of an episode, a countdown of 10 seconds starts the next
+  episode, from the same source and quality when the addon gives a
+  bingeGroup. Play now and Cancel are on the countdown. Settings, Playback,
+  Play the next episode, turns it off.
+- + List adds a title to the watchlist.
+- The episodes show a watched mark and a progress bar. A long press on an
+  episode gives Play, Sources, Mark as watched, and Mark the episodes before
+  as watched.
+- New episodes: the app checks the series of the library one time in 6
+  hours, and shows the episodes of the last 14 days that are not watched.
+- Settings, Backup and restore: a backup of the library, the sources, the
+  trusted hosts, and the settings goes to the clipboard and to a file that
+  iTunes File Sharing shows.
+- A `zettalite://tab` link goes back to the first screen of the tab.
+
 ## 0.4.0 (2026-10-17)
 
 Streams.
