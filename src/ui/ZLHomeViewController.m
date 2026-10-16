@@ -3,6 +3,8 @@
 #import "ZLCatalogViewController.h"
 #import "ZLEmptyView.h"
 #import "ZLImageLoader.h"
+#import "ZLLibrary.h"
+#import "ZLLibraryRows.h"
 #import "ZLRowCell.h"
 #import "ZLTheme.h"
 #import "ZLTitleViewController.h"
@@ -116,6 +118,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 @property (nonatomic, strong) ZLBannerView *banner;
 @property (nonatomic, strong) UISegmentedControl *filter;
 @property (nonatomic, strong) ZLEmptyView *emptyView;
+@property (nonatomic, strong) NSArray *libraryRows;
 @end
 
 @implementation ZLHomeViewController
@@ -128,8 +131,10 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
         _errors = [NSMutableDictionary dictionary];
         _loading = [NSMutableSet set];
         _offsets = [NSMutableDictionary dictionary];
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(addonsChanged)
-                                                     name:ZLAddonsDidChangeNotification object:nil];
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        [center addObserver:self selector:@selector(addonsChanged) name:ZLAddonsDidChangeNotification object:nil];
+        [center addObserver:self selector:@selector(libraryChanged) name:ZLLibraryDidChangeNotification object:nil];
+        [center addObserver:self selector:@selector(libraryChanged) name:ZLNewEpisodesDidChangeNotification object:nil];
     }
     return self;
 }
@@ -170,6 +175,21 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 
 - (void)addonsChanged {
     [self rebuild];
+    [ZLLibraryRows refreshNewEpisodes];
+}
+
+- (void)libraryChanged {
+    [self buildLibraryRows];
+    [self.tableView reloadData];
+}
+
+// Continue watching and New episodes come first, as in ZettaStream.
+- (void)buildLibraryRows {
+    NSMutableArray *rows = [NSMutableArray array];
+    for (ZLLibraryRow *row in @[ [ZLLibraryRows continueWatching], [ZLLibraryRows newEpisodes] ]) {
+        if (row.metas.count) [rows addObject:row];
+    }
+    self.libraryRows = rows;
 }
 
 - (BOOL)catalogMatchesFilter:(ZLCatalog *)catalog {
@@ -188,6 +208,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
         if ([self catalogMatchesFilter:catalog]) [catalogs addObject:catalog];
     }
     self.catalogs = catalogs;
+    [self buildLibraryRows];
     BOOL empty = [ZLAddonManager shared].addons.count == 0;
     if (empty && !self.emptyView) {
         self.emptyView = [[ZLEmptyView alloc] initWithTitle:@"No sources"
@@ -220,7 +241,12 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 
 #pragma mark - Table
 
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return 2;
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    if (section == 0) return [ZLAddonManager shared].addons.count ? (NSInteger)self.libraryRows.count : 0;
     return (NSInteger)self.catalogs.count;
 }
 
@@ -232,6 +258,22 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     ZLRowCell *cell = [tableView dequeueReusableCellWithIdentifier:@"row" forIndexPath:indexPath];
+    if (indexPath.section == 0) {
+        ZLLibraryRow *row = self.libraryRows[(NSUInteger)indexPath.row];
+        cell.delegate = self;
+        cell.tag = -1 - indexPath.row;
+        cell.showsMore = NO;
+        cell.title = row.title;
+        cell.subtitle = nil;
+        cell.badges = row.badges;
+        cell.progress = row.progress;
+        cell.metas = row.metas;
+        cell.loading = NO;
+        cell.offset = 0;
+        return cell;
+    }
+    cell.badges = nil;
+    cell.progress = nil;
     ZLCatalog *catalog = self.catalogs[(NSUInteger)indexPath.row];
     cell.delegate = self;
     cell.showsMore = YES;
@@ -247,7 +289,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 }
 
 - (void)tableView:(UITableView *)tableView didEndDisplayingCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ((NSUInteger)indexPath.row < self.catalogs.count) {
+    if (indexPath.section == 1 && (NSUInteger)indexPath.row < self.catalogs.count) {
         ZLCatalog *catalog = self.catalogs[(NSUInteger)indexPath.row];
         self.offsets[catalog.key] = @(((ZLRowCell *)cell).offset);
     }
@@ -263,7 +305,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
         else self.results[key] = metas;
         NSUInteger row = [self.catalogs indexOfObject:catalog];
         if (row != NSNotFound) {
-            [self.tableView reloadRowsAtIndexPaths:@[ [NSIndexPath indexPathForRow:(NSInteger)row inSection:0] ]
+            [self.tableView reloadRowsAtIndexPaths:@[ [NSIndexPath indexPathForRow:(NSInteger)row inSection:1] ]
                                   withRowAnimation:UITableViewRowAnimationNone];
         }
         [self updateBanner];
@@ -273,11 +315,20 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 #pragma mark - Rows
 
 - (void)rowCell:(ZLRowCell *)cell didSelectMeta:(ZLMeta *)meta atIndex:(NSUInteger)index {
+    if (cell.tag < 0) {
+        // A library row plays the next episode, or the film, at once.
+        ZLLibraryRow *row = self.libraryRows[(NSUInteger)(-1 - cell.tag)];
+        ZLTitleViewController *page = [[ZLTitleViewController alloc] initWithMeta:meta];
+        [self.navigationController pushViewController:page animated:YES];
+        id episode = index < row.episodes.count ? row.episodes[index] : nil;
+        [page playEpisode:[episode isKindOfClass:[ZLEpisode class]] ? episode : nil];
+        return;
+    }
     [self open:meta];
 }
 
 - (void)rowCellDidSelectTitle:(ZLRowCell *)cell {
-    if ((NSUInteger)cell.tag >= self.catalogs.count) return;
+    if (cell.tag < 0 || (NSUInteger)cell.tag >= self.catalogs.count) return;
     ZLCatalog *catalog = self.catalogs[(NSUInteger)cell.tag];
     ZLCatalogViewController *grid = [[ZLCatalogViewController alloc] initWithCatalog:catalog extras:nil];
     grid.title = [self titleFor:catalog];
