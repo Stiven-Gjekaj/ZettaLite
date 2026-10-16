@@ -10,8 +10,6 @@
 @interface ZLStreamsViewController : UITableViewController
 // episode is nil for a film.
 - (instancetype)initWithMeta:(ZLMeta *)meta episode:(ZLEpisode *)episode;
-// The play items of the streams from index on, for the fallback.
-+ (NSArray *)itemsForStreams:(NSArray *)streams from:(NSUInteger)index meta:(ZLMeta *)meta episode:(ZLEpisode *)episode;
 @end
 
 // Collects the streams of all addons. It calls back when all addons answered

@@ -11,6 +11,9 @@
 @property (nonatomic, copy) NSDictionary *headers;
 // For example "Torrentio 1080p". The loading box shows it.
 @property (nonatomic, copy) NSString *sourceName;
+// The bingeGroup of the stream. The next episode prefers the same group, so
+// that it comes from the same source and quality.
+@property (nonatomic, copy) NSString *bingeGroup;
 // The second at which the playback starts. 0 starts at the start.
 @property (nonatomic) double startTime;
 // Called when the player closes, with the second where it stopped, the length,

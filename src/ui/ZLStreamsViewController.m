@@ -5,6 +5,7 @@
 #import "ZLSettings.h"
 #import "ZLStreamRank.h"
 #import "ZLTheme.h"
+#import "ZLWatch.h"
 
 void ZLCollectStreams(ZLMeta *meta, ZLEpisode *episode, NSTimeInterval limit, void (^completion)(NSArray *streams)) {
     NSMutableArray *streams = [NSMutableArray array];
@@ -111,21 +112,6 @@ void ZLCollectStreams(ZLMeta *meta, ZLEpisode *episode, NSTimeInterval limit, vo
     return self;
 }
 
-+ (NSArray *)itemsForStreams:(NSArray *)streams from:(NSUInteger)index meta:(ZLMeta *)meta episode:(ZLEpisode *)episode {
-    NSMutableArray *items = [NSMutableArray array];
-    NSString *title = episode ? [NSString stringWithFormat:@"%@ %@", meta.name, [episode code]] : meta.name;
-    // The chosen stream, then the next best ones, at most 5 in all.
-    for (NSUInteger i = index; i < streams.count && items.count < 5; i++) {
-        ZLStream *stream = streams[i];
-        ZLPlayItem *item = [ZLPlayItem itemWithURL:stream.URL title:title];
-        item.headers = stream.headers;
-        NSString *name = [stream.name stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-        item.sourceName = name.length ? [NSString stringWithFormat:@"%@: %@", stream.addonName, name] : stream.addonName;
-        [items addObject:item];
-    }
-    return items;
-}
-
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.tableView.backgroundColor = ZLBackgroundColor();
@@ -211,8 +197,7 @@ void ZLCollectStreams(ZLMeta *meta, ZLEpisode *episode, NSTimeInterval limit, vo
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NSArray *items = [ZLStreamsViewController itemsForStreams:self.ranked.streams from:(NSUInteger)indexPath.row
-                                                         meta:self.meta episode:self.episode];
+    NSArray *items = [ZLWatch itemsForStreams:self.ranked.streams from:(NSUInteger)indexPath.row meta:self.meta episode:self.episode];
     [ZLPlayback playItems:items from:self];
 }
 
