@@ -1,10 +1,19 @@
-// The streams of a film or an episode, from all addons at the same time.
-// Torrent streams do not show, because the app has no torrent engine.
+// The streams of a film or an episode, from all addons at the same time, best
+// first. Each stream shows its badges and all of its text. Torrent streams
+// and, by default, the streams that are too heavy do not show.
 
 #import <UIKit/UIKit.h>
 #import "ZLMeta.h"
 
+@class ZLPlayItem;
+
 @interface ZLStreamsViewController : UITableViewController
 // episode is nil for a film.
 - (instancetype)initWithMeta:(ZLMeta *)meta episode:(ZLEpisode *)episode;
+// The play items of the streams from index on, for the fallback.
++ (NSArray *)itemsForStreams:(NSArray *)streams from:(NSUInteger)index meta:(ZLMeta *)meta episode:(ZLEpisode *)episode;
 @end
+
+// Collects the streams of all addons. It calls back when all addons answered
+// or after the time limit.
+void ZLCollectStreams(ZLMeta *meta, ZLEpisode *episode, NSTimeInterval limit, void (^completion)(NSArray *streams));
