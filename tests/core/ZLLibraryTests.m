@@ -63,6 +63,18 @@ ZL_TEST(test_library_finds_the_next_episode) {
     ZL_EQUAL_INT([library continueWatching].count, 0);
 }
 
+ZL_TEST(test_library_keeps_the_episodes_of_a_newer_copy) {
+    ZLLibrary *library = [[ZLLibrary alloc] initWithStoreName:@"library" store:TemporaryStore()];
+    ZLMeta *small = [ZLMeta metaWithJSON:@{ @"id": @"tt1", @"type": @"series", @"name": @"Show" }];
+    [library setVideo:@"tt1:1:1" ofMeta:small watched:YES];
+    ZL_EXPECT([library nextEpisodeOf:[library itemFor:@"tt1"].meta] == nil);
+    [library updateMeta:Series()];
+    ZL_EQUAL([library nextEpisodeOf:[library itemFor:@"tt1"].meta].identifier, @"tt1:1:2");
+    // A title that is not in the library stays out.
+    [library updateMeta:[ZLMeta metaWithJSON:@{ @"id": @"tt2", @"type": @"movie", @"name": @"Other" }]];
+    ZL_EXPECT([library itemFor:@"tt2"] == nil);
+}
+
 ZL_TEST(test_library_finds_new_episodes) {
     ZLLibrary *library = [[ZLLibrary alloc] initWithStoreName:@"library" store:TemporaryStore()];
     NSArray *fresh = [library newEpisodesOf:Series() days:14];

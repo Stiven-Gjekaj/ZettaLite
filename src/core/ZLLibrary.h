@@ -30,6 +30,8 @@ extern const double ZLWatchedPart;
 - (ZLLibraryItem *)itemFor:(NSString *)identifier;
 - (BOOL)isInWatchlist:(NSString *)identifier;
 - (void)setMeta:(ZLMeta *)meta inWatchlist:(BOOL)inWatchlist;
+// Keeps a newer copy of a title that is in the library already.
+- (void)updateMeta:(ZLMeta *)meta;
 
 // video is the ID of the episode, or the ID of the film.
 - (void)recordMeta:(ZLMeta *)meta video:(NSString *)video position:(double)position duration:(double)duration;
