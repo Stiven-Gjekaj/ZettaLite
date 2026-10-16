@@ -123,7 +123,7 @@ static NSDictionary *ZLKeptJSON(ZLMeta *meta) {
 - (void)updateMeta:(ZLMeta *)meta {
     if (!self.titles[meta.identifier]) return;
     [self entryFor:meta];
-    [self.store setObject:self.data named:self.name];
+    [self save];
 }
 
 - (void)recordMeta:(ZLMeta *)meta video:(NSString *)video position:(double)position duration:(double)duration {
