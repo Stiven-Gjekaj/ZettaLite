@@ -1,6 +1,7 @@
 #!/bin/sh
 # Build one armv7 command line tool for iOS 6.
 # Usage: ./build.sh OUTPUT [-I DIR | -D NAME ...] SOURCE.m [more sources] [-framework X ...]
+#        [-L DIR] [-l NAME] [LIBRARY.dylib] [-Wl,OPTION]
 # Put each -I and -D option before the sources that need it.
 # The script compiles each source with ARC, then links without ARC.
 # The link step has no -fobjc-arc, so clang does not ask for libarclite.
@@ -24,6 +25,9 @@ while [ $# -gt 0 ]; do
             ;;
         -framework|-l*)
             if [ "$1" = "-framework" ]; then LINK="$LINK -framework $2"; shift; else LINK="$LINK $1"; fi
+            ;;
+        -L*|-Wl,*|*.dylib|*.a)
+            LINK="$LINK $1"
             ;;
         *)
             # Put each object in build/obj, so that the source tree stays clean.
