@@ -203,6 +203,18 @@ so the DTS decoder crashed. The script saves r9 around the call.
 - When the own player falls behind, it skips the loop filter of the decoder
   before it drops frames.
 
+## Streams
+
+- **The quality comes from the text of a stream** (decided during 0.4).
+  Addons put the resolution, the codec, and the audio in the name, the title,
+  or the file name. `ZLStreamInfo` reads them with whole-word rules, so that
+  "hd" in "HDTV" or "ts" in "Parts" do not count. A stream with no codec in
+  its text counts as H.264, because most streams are H.264.
+- **Autoplay waits at most 8 seconds for the addons.** A slow addon must not
+  hold the playback. Its streams show in Sources.
+- **At most 5 sources in a row.** After 5 failed sources, the app shows the
+  error. A user who wants more chooses in Sources.
+
 ## Toolchain
 
 - The app builds with the iOS 9.3 SDK of Theos and the clang of the current
