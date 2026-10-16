@@ -117,11 +117,17 @@ HEVC, VP9, or AV1. RetroTube tested this on the same phone.
   1080p, with AirPlay and low battery use.
 - **Audio that the system player refuses is converted.**
   For AC3, E-AC3, DTS, TrueHD, Opus, Vorbis, and FLAC, FFmpeg decodes the
-  audio and mixes it down to stereo. Then the hardware AudioConverter encodes
-  it to AAC. The AAC encoder of FFmpeg is the fallback, because the hardware
-  encoder can fail when other apps mix audio. The surround channels are lost.
-  Most addon files are H.264 with AC3, so most streams stay on this fast
-  path.
+  audio and mixes it down to stereo. Then the AudioConverter of iOS encodes
+  it to AAC. The surround channels are lost. Most addon files are H.264 with
+  AC3, so most streams stay on this fast path.
+- **The software AAC encoder of Apple, not the hardware one** (measured
+  during 0.2, 2026-10-17). The research said that iOS 6 has only a hardware
+  AAC encoder. The iPhone 4S has two: `aphw` (hardware) and `appl`
+  (software). The software one encodes at 19.6 times real time. The hardware
+  one failed in a test tool with no audio session. The AAC encoder of FFmpeg
+  encodes real sound at about 1 time real time on the A5 chip, so it cannot
+  keep up, and it is only the last fallback. With the Apple encoder, a 6
+  second segment with 5.1 AC3 takes 1.0 second.
 - **Other video codecs go to the own player.**
   For HEVC, VP9, AV1, MPEG-2, and MPEG-4 ASP:
   - FFmpeg decodes the video on 2 threads.
@@ -148,20 +154,44 @@ many reference frames, or with 10-bit samples, goes to the own player.
 
 ### Limits of the A5 chip
 
-The estimates for software decode on 2 Cortex-A9 cores at 800 MHz are from
-published data for nearby chips (research on 2026-10-16). Nobody has
-measured them on this phone yet.
+`probe/bench.m` measured the decoders on the iPhone 4S (2026-10-17). Each
+file is 10 seconds of Big Buck Bunny at 30 frames per second. The value is
+the decode speed on 2 threads as a multiple of real time.
 
-| Codec | Real time |
-| --- | --- |
-| H.264 High | 720p at medium bitrate |
-| HEVC 8-bit | 480p. 720p only at low bitrate. |
-| HEVC 10-bit | 360p to 480p |
-| VP9 | 480p. 720p is marginal. |
-| AV1 | 360p. 480p is marginal. |
+| Codec | 360p | 480p | 576p | 720p |
+| --- | --- | --- | --- | --- |
+| H.264 8-bit (16 reference frames) | | | | 1.32 |
+| H.264 10-bit | | 1.44 | | 0.65 |
+| HEVC 8-bit | | 1.24 | | 0.57 |
+| HEVC 10-bit | | 0.86 (1.03 with no loop filter) | | |
+| VP9 | | 2.20 | | 1.13 |
+| AV1 (dav1d) | 3.40 | 2.06 | | |
+| MPEG-2 | | | 6.06 | |
+| MPEG-4 ASP (Xvid) | | 9.42 | | |
 
-Audio decode is cheap. AC3 uses about 5 to 10% of one core, and DTS about 10
-to 20%.
+The skip of the loop filter helps H.264 and HEVC by 10 to 30%. It does not
+help VP9 or AV1.
+
+Audio decode is cheap: AC3 5.1 decodes at 11.6 times real time, DTS 5.1 at
+9.1 times, and Opus at 29.6 times.
+
+`src/core/ZLDecodeLimits.m` turns each value into pixels per second. A
+stream fits when its pixel rate times 1.2 is below that value. The margin is
+for the display and the sound. In the app, VP9 720p at 30 frames per second
+dropped 89 of 300 frames, and it is "too heavy" in the table. HEVC 480p
+dropped 8 frames, and AV1 480p dropped 2.
+
+### AV1
+
+The AV1 decoder of FFmpeg needs a hardware decoder. The app builds dav1d
+1.5.1 (BSD) with its ARM assembly, and FFmpeg uses it.
+
+### Faults in FFmpeg on iOS
+
+`scripts/ffmpeg.sh` changes the source of FFmpeg in four places. The fourth
+is a fault that only iOS shows: the NEON synthesis filter of DTS keeps a
+pointer in r9 across a call to a C function. iOS lets a function change r9,
+so the DTS decoder crashed. The script saves r9 around the call.
 
 **Decision: heavy streams are marked and hidden.**
 
