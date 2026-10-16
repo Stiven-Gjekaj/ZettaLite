@@ -49,6 +49,29 @@ An input that cannot seek, for example a live channel, becomes a live
 playlist. One thread cuts the input into segments as they come. The
 playlist holds the newest 8 segments.
 
+## The own player
+
+`ZLMediaInfo` sends other video to `ZLPlayerEngine`:
+
+```
+URL -> FFmpeg demuxer -> packet queues -> video decoder (2 threads) -> frame queue -> ZLVideoView
+                                       -> audio decoder -> ring buffer -> AudioQueue
+```
+
+- One thread reads the packets, up to 8 MB ahead.
+- One thread decodes the video into a queue of 4 frames. A frame that is
+  not 8-bit 4:2:0 becomes 8-bit 4:2:0 with swscale. When the decoder falls
+  behind, it first skips the loop filter, and then the frames that no other
+  frame needs.
+- One thread decodes the audio, mixes it down to stereo 48 kHz, and writes
+  it into a ring buffer of 3 seconds. An AudioQueue plays it.
+- The audio is the clock. The engine keeps the sample of the AudioQueue
+  where each run of sound starts, and the media second of that sample.
+- A display link asks the engine 60 times a second for the frame of the
+  current time. `ZLVideoView` shows it with OpenGL ES 2. A shader changes
+  YUV into RGB with the BT.601 or the BT.709 matrix.
+- In the background, the engine decodes only the audio.
+
 ## The audio grid
 
 `ZLAudioEncoder` puts the AAC frames on one grid of 1024 samples from time
@@ -67,11 +90,13 @@ src/core/      code with no FFmpeg and no UIKit. The tests run it on the Mac and
   ZLH264         reads the H.264 SPS
   ZLLink         reads zettalite:// links
   ZLLog          the log file for the diagnostics
+  ZLDecodeLimits the measured speed of the software decoders
 src/media/     the code with FFmpeg. The tests run it on the phone.
   ZLInput          opens a URL with FFmpeg
   ZLMediaInfo      picks the streams and the player
   ZLAudioEncoder   changes audio into AAC
   ZLRemuxSession   makes the HLS segments
+  ZLPlayerEngine   the engine of the own player
 src/ui/        the screens
 src/ffmpeg/    a compiler builtin for FFmpeg that iOS 6 does not have
 src/tls/       the configuration of mbedTLS for iOS 6
@@ -87,13 +112,14 @@ packaging/     the files of the Cydia package
 | Code | Licence | Build |
 | --- | --- | --- |
 | FFmpeg 7.1.1 | LGPL 2.1 | `scripts/ffmpeg.sh`, one dylib in the app |
+| dav1d 1.5.1 | BSD 2-Clause | `scripts/dav1d.sh`, inside the FFmpeg dylib |
 | mbedTLS 3.6.2 | Apache 2.0 | `scripts/mbedtls.sh`, linked into the app |
 | Mozilla root certificates | MPL 2.0 | `scripts/cacert.sh`, `resources/cacert.pem` |
 
 The scripts download the sources, check the SHA-256, and build them into
 `build/`. Git holds none of the third-party sources.
 
-`scripts/ffmpeg.sh` changes three things in FFmpeg:
+`scripts/ffmpeg.sh` changes four things in FFmpeg:
 
 - The `movrelx` macro of the ARM assembly gets a Darwin local label, so
   that the new Apple linker accepts the objects.
@@ -101,3 +127,5 @@ The scripts download the sources, check the SHA-256, and build them into
   demuxer does.
 - The `https` protocol exists without TLS, so that the HLS and DASH
   demuxers accept https links. The app fetches the bytes itself.
+- The NEON synthesis filter of DTS saves r9 around a call, because iOS lets
+  a function change r9.
