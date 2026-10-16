@@ -1,0 +1,8 @@
+# Third-party SDK. Do not put it in git.
+sdks/
+
+# Build output
+*.o
+
+# The OS
+.DS_Store
