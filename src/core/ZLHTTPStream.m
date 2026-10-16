@@ -1,4 +1,5 @@
 #import "ZLHTTPStream.h"
+#import "ZLLog.h"
 
 // The connection stops when it is this far ahead of the reader.
 static const int64_t ZLMaxAhead = 8 * 1024 * 1024;
@@ -107,6 +108,7 @@ static NSThread *ZLNetworkThread(void) {
         [request setValue:value forHTTPHeaderField:key];
     }];
     if (offset > 0) [request setValue:[NSString stringWithFormat:@"bytes=%lld-", offset] forHTTPHeaderField:@"Range"];
+    ZLLog(@"http %@ from %lld", self.URL.lastPathComponent, offset);
     NSDictionary *job = @{ @"request": request, @"generation": @(self.generation) };
     [self performSelector:@selector(connectOnNetworkThread:) onThread:ZLNetworkThread() withObject:job waitUntilDone:NO];
 }
@@ -175,6 +177,7 @@ static int64_t ZLTotalFromContentRange(NSString *range) {
     if ([self isCurrent:connection]) {
         NSHTTPURLResponse *http = [response isKindOfClass:[NSHTTPURLResponse class]] ? (NSHTTPURLResponse *)response : nil;
         NSInteger status = http ? http.statusCode : 200;
+        ZLLog(@"http %@ status %ld, length %lld", self.URL.lastPathComponent, (long)status, response.expectedContentLength);
         int64_t asked = self.bufferStart + (int64_t)self.buffer.length;
         if (status >= 400) {
             self.error = ZLMakeError(ZLErrorHTTPStatus, [NSString stringWithFormat:@"The server answered with HTTP %ld.", (long)status]);

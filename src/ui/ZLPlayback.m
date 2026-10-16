@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import "ZLHLSServer.h"
 #import "ZLInput.h"
+#import "ZLLog.h"
 #import "ZLMediaInfo.h"
 #import "ZLRemuxSession.h"
 #import "ZLTheme.h"
@@ -148,15 +149,18 @@ static ZLPlayback *ZLCurrentPlayback;
         return;
     }
     ZLPlayItem *item = self.item;
+    ZLLog(@"play %@", item.URL);
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
         NSError *error = nil;
         ZLInput *input = [ZLInput openURL:item.URL headers:item.headers error:&error];
+        ZLLog(@"open %@", input ? @"done" : error.localizedDescription);
         self.input = input;
         ZLMediaInfo *info = input ? [ZLMediaInfo infoForInput:input languages:[self preferredLanguages]] : nil;
         ZLRemuxSession *session = nil;
         if (info.route == ZLRouteSystem) {
             session = [[ZLRemuxSession alloc] initWithInput:input info:info audioIndex:-1];
             if (![session prepare:&error]) session = nil;
+            ZLLog(@"prepare %@, %lu segments", session ? @"done" : error.localizedDescription, (unsigned long)session.segmentCount);
         }
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.cancelled) {

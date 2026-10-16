@@ -1,4 +1,5 @@
 #import "ZLHLSServer.h"
+#import "ZLLog.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -134,6 +135,7 @@ static void ZLRespond(int fd, int status, NSString *reason, NSString *type, NSDa
         NSString *method = words.count >= 2 ? words[0] : nil;
         NSString *path = words.count >= 2 ? words[1] : nil;
         BOOL head = [method isEqualToString:@"HEAD"];
+        ZLLog(@"hls %@ %@", method, path);
         if (!head && ![method isEqualToString:@"GET"]) {
             ZLRespond(fd, 405, @"Method Not Allowed", @"text/plain", nil, NO);
             close(fd);

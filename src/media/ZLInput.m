@@ -1,5 +1,6 @@
 #import "ZLInput.h"
 #import "ZLHTTPStream.h"
+#import "ZLLog.h"
 #include <libavutil/opt.h>
 
 static const int ZLIOBufferSize = 64 * 1024;
@@ -123,7 +124,9 @@ static int ZLIOClose(AVFormatContext *context, AVIOContext *pb) {
     // A short probe keeps the start fast on the A5 chip.
     av_dict_set(&options, "probesize", "2000000", 0);
     av_dict_set(&options, "analyzeduration", "3000000", 0);
+    ZLLog(@"avformat_open_input %@", name);
     int result = avformat_open_input(&context, name.UTF8String, NULL, &options);
+    ZLLog(@"avformat_open_input: %d", result);
     av_dict_free(&options);
     if (result < 0) {
         // avformat_open_input frees the context, but not a custom pb.
@@ -134,6 +137,7 @@ static int ZLIOClose(AVFormatContext *context, AVIOContext *pb) {
     }
     self.context = context;
     result = avformat_find_stream_info(context, NULL);
+    ZLLog(@"avformat_find_stream_info: %d", result);
     if (result < 0) {
         if (error) *error = self.streamError ?: ZLAVError(result, @"FFmpeg cannot read the streams.");
         [self close];
