@@ -34,6 +34,7 @@
 @property (nonatomic) BOOL failed;
 @property (nonatomic) double lastPosition;
 @property (nonatomic) double lastDuration;
+@property (nonatomic, strong) NSTimer *clock;
 @end
 
 @implementation ZLSystemPlayerViewController
@@ -51,7 +52,23 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    // The player gives no position after it stops, so keep it each second.
+    if (!self.clock) {
+        self.clock = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(keepPosition) userInfo:nil repeats:YES];
+    }
+}
+
+- (void)keepPosition {
+    double position = self.moviePlayer.currentPlaybackTime;
+    double duration = self.moviePlayer.duration;
+    if (position > 0 && !isnan(position)) self.lastPosition = position;
+    if (duration > 0 && !isnan(duration)) self.lastDuration = duration;
+}
+
 - (void)finished:(NSNotification *)note {
+    [self keepPosition];
     NSInteger reason = [note.userInfo[MPMoviePlayerPlaybackDidFinishReasonUserInfoKey] integerValue];
     if (reason == MPMovieFinishReasonPlaybackEnded) self.ended = YES;
     if (reason == MPMovieFinishReasonPlaybackError && self.onError) {
@@ -64,8 +81,7 @@
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    self.lastPosition = self.moviePlayer.currentPlaybackTime;
-    self.lastDuration = self.moviePlayer.duration;
+    [self keepPosition];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -76,10 +92,13 @@
         [self.session close];
         self.session = nil;
     }
+    [self.clock invalidate];
+    self.clock = nil;
     if (!self.failed && self.onClose) {
         double position = self.lastPosition;
         double duration = self.lastDuration;
-        BOOL ended = self.ended || (duration > 0 && position >= duration - 2);
+        // A close from code also gives the reason "ended". The position tells.
+        BOOL ended = duration > 0 && position >= duration - 10 && (self.ended || position >= duration - 2);
         void (^onClose)(double, double, BOOL) = self.onClose;
         self.onClose = nil;
         onClose(isnan(position) ? 0 : position, isnan(duration) ? 0 : duration, ended);
