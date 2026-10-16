@@ -25,4 +25,19 @@ $F $A -c:a flac audio.flac
 mkdir -p dash
 $F $V $A $G -c:v libx264 -c:a aac -ac 2 -map 0:v -map 1:a -seg_duration 4 -use_template 1 -use_timeline 0 \
     -f dash dash/manifest.mpd
+# HLS and an M3U list of channels, as an IPTV service gives them.
+mkdir -p live
+$F $V $A $G -c:v libx264 -profile:v main -c:a aac -ac 2 -hls_time 4 -hls_list_size 0 \
+    -f hls live/index.m3u8
+cat >live/tv.m3u <<M3U
+#EXTM3U
+#EXTINF:-1 tvg-id="test.hls" tvg-logo="http://127.0.0.1:8765/live/logo.png" group-title="Test",Test HLS
+index.m3u8
+#EXTINF:-1 group-title="Test",Test TS
+#EXTVLCOPT:http-user-agent=ZettaLite-Test
+../h264-aac.ts
+#EXTINF:-1 group-title="Other tests",Test HEVC
+../hevc-aac.mkv
+M3U
+cp "$ROOT/resources/Icon@2x.png" live/logo.png
 ls -l "$OUT"
