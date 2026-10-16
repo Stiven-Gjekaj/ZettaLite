@@ -22,7 +22,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.1</string>
+    <string>0.1.0</string>
     <key>CFBundleSupportedPlatforms</key>
     <array>
         <string>iPhoneOS</string>
@@ -39,7 +39,7 @@
         </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>1.0.1</string>
+    <string>0.1.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>MinimumOSVersion</key>
