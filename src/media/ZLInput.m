@@ -97,8 +97,11 @@ static int ZLIOClose(AVFormatContext *context, AVIOContext *pb) {
     context->opaque = (__bridge void *)self;
     context->interrupt_callback.callback = ZLInterrupt;
     context->interrupt_callback.opaque = (__bridge void *)self;
-    context->io_open = ZLIOOpen;
-    context->io_close2 = ZLIOClose;
+    // A file opens with the file code of FFmpeg. A URL opens through the hook.
+    if (!self.URL.isFileURL) {
+        context->io_open = ZLIOOpen;
+        context->io_close2 = ZLIOClose;
+    }
     NSString *name = self.URL.absoluteString;
     AVIOContext *io = NULL;
     if (!self.URL.isFileURL) {
