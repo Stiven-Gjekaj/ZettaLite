@@ -56,6 +56,7 @@
 - (void)searchFor:(NSString *)text {
     NSString *query = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (!query.length) return;
+    [self view];  // A link can come before the view loads.
     self.searchBar.text = query;
     self.query = query;
     NSUInteger generation = ++self.generation;
@@ -66,6 +67,12 @@
     [[ZLAddonManager shared] search:query each:^(ZLCatalog *catalog, NSArray *metas) {
         if (generation != self.generation) return;
         [self.rows addObject:@{ @"catalog": catalog, @"metas": metas }];
+        // The order of the addons and their catalogs, not the order of the answers.
+        NSArray *order = [self catalogOrder];
+        [self.rows sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+            NSUInteger first = [order indexOfObject:[a[@"catalog"] key]], second = [order indexOfObject:[b[@"catalog"] key]];
+            return first < second ? NSOrderedAscending : first > second ? NSOrderedDescending : NSOrderedSame;
+        }];
         [self.tableView reloadData];
         [self updateEmpty];
     } done:^{
@@ -73,6 +80,14 @@
         self.searching = NO;
         [self updateEmpty];
     }];
+}
+
+- (NSArray *)catalogOrder {
+    NSMutableArray *keys = [NSMutableArray array];
+    for (ZLAddon *addon in [ZLAddonManager shared].addons) {
+        for (ZLCatalog *catalog in addon.catalogs) [keys addObject:catalog.key];
+    }
+    return keys;
 }
 
 - (void)updateEmpty {
