@@ -2,6 +2,7 @@
 #import "ZLAddonManager.h"
 #import "ZLLinkViewController.h"
 #import "ZLLog.h"
+#import "ZLSettings.h"
 #import "ZLSources.h"
 #import "ZLTheme.h"
 #import "ZLTrust.h"
@@ -165,10 +166,108 @@
 
 @end
 
+#pragma mark - Playback
+
+// The switches of the playback, and the audio language.
+@interface ZLPlaybackSettingsViewController : UITableViewController <UIActionSheetDelegate>
+@end
+
+@implementation ZLPlaybackSettingsViewController
+
+- (NSArray *)languages {
+    return @[ @[ @"The language of the phone", [NSNull null] ], @[ @"English", @"eng" ], @[ @"German", @"ger" ],
+              @[ @"French", @"fre" ], @[ @"Spanish", @"spa" ], @[ @"Italian", @"ita" ], @[ @"Albanian", @"alb" ],
+              @[ @"Portuguese", @"por" ], @[ @"Japanese", @"jpn" ], @[ @"Russian", @"rus" ], @[ @"Turkish", @"tur" ] ];
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Playback";
+    self.tableView.backgroundView = nil;
+    self.tableView.backgroundColor = ZLBackgroundColor();
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return 2;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return section == 0 ? 3 : 1;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    if (section == 0) {
+        return @"Autoplay: Play starts the best stream at once, and the next one when a stream fails. Sources shows all "
+               @"streams. A heavy stream needs more than the A5 chip can decode.";
+    }
+    return @"The player picks this audio track first, when a file has more than one.";
+}
+
+- (NSString *)languageName {
+    NSString *code = [ZLSettings shared].audioLanguage;
+    for (NSArray *pair in [self languages]) {
+        if ([pair[1] isEqual:code ?: [NSNull null]]) return pair[0];
+    }
+    return code;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];
+    cell.backgroundColor = ZLSurfaceColor();
+    cell.textLabel.textColor = ZLTextColor();
+    cell.textLabel.font = ZLBoldFont(15);
+    cell.detailTextLabel.textColor = ZLSecondaryTextColor();
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    if (indexPath.section == 1) {
+        cell.textLabel.text = @"Audio language";
+        cell.detailTextLabel.text = [self languageName];
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        cell.selectionStyle = UITableViewCellSelectionStyleBlue;
+        return cell;
+    }
+    UISwitch *toggle = [UISwitch new];
+    toggle.tag = indexPath.row;
+    [toggle addTarget:self action:@selector(toggled:) forControlEvents:UIControlEventValueChanged];
+    ZLSettings *settings = [ZLSettings shared];
+    NSArray *titles = @[ @"Autoplay", @"Show heavy streams", @"Play the next episode" ];
+    NSArray *values = @[ @(settings.autoplay), @(settings.showHeavyStreams), @(settings.playNextEpisode) ];
+    cell.textLabel.text = titles[(NSUInteger)indexPath.row];
+    toggle.on = [values[(NSUInteger)indexPath.row] boolValue];
+    cell.accessoryView = toggle;
+    return cell;
+}
+
+- (void)toggled:(UISwitch *)toggle {
+    ZLSettings *settings = [ZLSettings shared];
+    if (toggle.tag == 0) settings.autoplay = toggle.on;
+    if (toggle.tag == 1) settings.showHeavyStreams = toggle.on;
+    if (toggle.tag == 2) settings.playNextEpisode = toggle.on;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.section != 1) return;
+    UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:@"Audio language" delegate:self cancelButtonTitle:nil
+                                         destructiveButtonTitle:nil otherButtonTitles:nil];
+    for (NSArray *pair in [self languages]) [sheet addButtonWithTitle:pair[0]];
+    sheet.cancelButtonIndex = [sheet addButtonWithTitle:@"Cancel"];
+    [sheet showFromTabBar:self.tabBarController.tabBar];
+}
+
+- (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)index {
+    if (index == sheet.cancelButtonIndex || index >= (NSInteger)[self languages].count) return;
+    id code = [self languages][(NSUInteger)index][1];
+    [ZLSettings shared].audioLanguage = code == [NSNull null] ? nil : code;
+    [self.tableView reloadData];
+}
+
+@end
+
 #pragma mark - Settings
 
 typedef NS_ENUM(NSInteger, ZLSettingsRow) {
     ZLSettingsSources,
+    ZLSettingsPlayback,
     ZLSettingsLink,
     ZLSettingsHosts,
     ZLSettingsDiagnostics,
@@ -214,6 +313,9 @@ typedef NS_ENUM(NSInteger, ZLSettingsRow) {
             cell.textLabel.text = @"Sources";
             cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu", (unsigned long)[[ZLSourceList shared] sources].count];
             break;
+        case ZLSettingsPlayback:
+            cell.textLabel.text = @"Playback";
+            break;
         case ZLSettingsLink:
             cell.textLabel.text = @"Play a link";
             break;
@@ -246,6 +348,7 @@ typedef NS_ENUM(NSInteger, ZLSettingsRow) {
     UIViewController *next = nil;
     switch ((ZLSettingsRow)indexPath.row) {
         case ZLSettingsSources: next = [ZLSourcesViewController new]; break;
+        case ZLSettingsPlayback: next = [[ZLPlaybackSettingsViewController alloc] initWithStyle:UITableViewStyleGrouped]; break;
         case ZLSettingsLink: next = [ZLLinkViewController new]; break;
         case ZLSettingsHosts: next = [[ZLHostsViewController alloc] initWithStyle:UITableViewStyleGrouped]; break;
         case ZLSettingsDiagnostics: next = [ZLDiagnosticsViewController new]; break;
