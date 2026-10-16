@@ -24,7 +24,8 @@ if [ "$1" = "--phone" ]; then
     # shellcheck disable=SC2086
     "$ROOT/build.sh" "$OUT/zltests-armv7" -I"$ROOT/src/core" -I"$ROOT/src/media" -I"$ROOT/tests" -I"$FFMPEG/include" \
         $CORE $MEDIA $CORE_TESTS $MEDIA_TESTS "$FFMPEG/lib/libzlffmpeg.dylib" \
-        -framework Foundation -framework Security -framework AudioToolbox 2>&1 | grep -v 'liblaunch.dylib' >&2 || true
+        -framework Foundation -framework Security -framework AudioToolbox >"$OUT/build.log" 2>&1 ||
+        { grep -v 'liblaunch.dylib' "$OUT/build.log" >&2; exit 1; }
     ssh iphone4s 'mkdir -p /tmp/zltests'
     scp -q "$OUT/zltests-armv7" iphone4s:/tmp/zltests/zltests
     scp -q "$FFMPEG/lib/libzlffmpeg.dylib" iphone4s:/tmp/zltests/
@@ -32,7 +33,8 @@ if [ "$1" = "--phone" ]; then
         "$ROOT/scripts/fixtures.sh" >/dev/null
     fi
     if ! ssh iphone4s 'test -d /tmp/zltests/fixtures/dash'; then
-        scp -q -r "$ROOT/build/fixtures" iphone4s:/tmp/zltests/
+        # The sftp server of the phone cannot make a new directory, so copy with tar.
+        COPYFILE_DISABLE=1 tar --no-xattrs -C "$ROOT/build" -cf - fixtures | ssh iphone4s 'tar -C /tmp/zltests -xf -'
     fi
     ssh iphone4s "cd /tmp/zltests && ldid -S libzlffmpeg.dylib && ldid -S zltests &&
         ZL_LIVE=${ZL_LIVE:-} ./zltests $*"
