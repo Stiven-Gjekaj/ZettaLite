@@ -89,7 +89,8 @@ L="$STAGE/install/lib"
 # libswscale and libavcodec both have half2float.o. Keep one of them.
 cp "$L/libswscale.a" "$STAGE/libswscale-dedup.a"
 ar d "$STAGE/libswscale-dedup.a" half2float.o
-clang $TARGET -dynamiclib -marm \
+clang $TARGET -marm -Os -c "$ROOT/src/ffmpeg/builtins.c" -o "$STAGE/builtins.o"
+clang $TARGET -dynamiclib -marm "$STAGE/builtins.o" \
     -install_name @executable_path/libzlffmpeg.dylib \
     -Wl,-all_load "$L/libavformat.a" "$L/libavcodec.a" "$L/libswresample.a" "$STAGE/libswscale-dedup.a" "$L/libavutil.a" \
     -lz -lxml2 -framework CoreFoundation -framework Foundation \
