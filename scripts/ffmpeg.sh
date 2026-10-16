@@ -51,11 +51,20 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cd "$STAGE"
 
-# configure asks pkg-config for libxml2. The SDK has libxml2 but no .pc
-# file, so a small script gives the answers.
+# FFmpeg decodes AV1 with dav1d.
+DAV1D="$ROOT/build/dav1d"
+if [ ! -f "$DAV1D/lib/libdav1d.a" ]; then
+    "$ROOT/scripts/dav1d.sh" >/dev/null
+fi
+
+# configure asks pkg-config for libxml2 and dav1d. The SDK has libxml2 but
+# no .pc file, so a small script gives the answers.
 cat >"$STAGE/pkg-config" <<PC
 #!/bin/sh
 case "\$*" in
+    *dav1d*--cflags* | *--cflags*dav1d*) echo "-I$DAV1D/include" ;;
+    *dav1d*--libs* | *--libs*dav1d*) echo "-L$DAV1D/lib -ldav1d" ;;
+    *dav1d*--modversion* | *--modversion*dav1d*) echo "1.5.1" ;;
     *--cflags*) echo "-I$SDK/usr/include/libxml2" ;;
     *--libs*) echo "-lxml2" ;;
     *--modversion*) echo "2.9.0" ;;
@@ -83,7 +92,7 @@ chmod +x "$STAGE/pkg-config"
     --disable-videotoolbox --disable-audiotoolbox --disable-securetransport \
     --disable-sdl2 --disable-xlib --disable-bzlib --disable-lzma \
     --disable-iconv --disable-hwaccels --disable-devices --disable-filters \
-    --enable-libxml2 --enable-zlib \
+    --enable-libxml2 --enable-zlib --enable-libdav1d \
     --disable-indevs --disable-outdevs >"$STAGE/configure.log" 2>&1 ||
     { tail -30 "$STAGE/configure.log"; exit 1; }
 
@@ -115,6 +124,7 @@ clang $TARGET -marm -Os -c "$ROOT/src/ffmpeg/builtins.c" -o "$STAGE/builtins.o"
 clang $TARGET -dynamiclib -marm "$STAGE/builtins.o" \
     -install_name @executable_path/libzlffmpeg.dylib \
     -Wl,-all_load "$L/libavformat.a" "$L/libavcodec.a" "$L/libswresample.a" "$STAGE/libswscale-dedup.a" "$L/libavutil.a" \
+    "$DAV1D/lib/libdav1d.a" \
     -lz -lxml2 -framework CoreFoundation -framework Foundation \
     -o "$OUT/lib/libzlffmpeg.dylib"
 echo "$OUT/lib/libzlffmpeg.dylib"
