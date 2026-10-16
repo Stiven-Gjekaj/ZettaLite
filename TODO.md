@@ -46,7 +46,7 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 - Prefer H.264 for autoplay. Start the next stream when one fails.
 - Send the headers of `behaviorHints.proxyHeaders`.
 
-## 0.5: the library
+## 0.5: the library (done, 2026-10-17)
 
 - Add continue watching, the watchlist, and watched marks.
 - Add the next episode with a countdown, and the "New episodes" row.
