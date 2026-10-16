@@ -69,9 +69,12 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
     [self.tabs dismissViewControllerAnimated:NO completion:nil];
     NSArray *names = @[ @"home", @"search", @"library", @"live", @"settings" ];
     switch (link.kind) {
-        case ZLLinkTab:
+        case ZLLinkTab: {
             self.tabs.selectedIndex = [names indexOfObject:link.text];
+            UINavigationController *navigation = (UINavigationController *)self.tabs.selectedViewController;
+            [navigation popToRootViewControllerAnimated:NO];
             break;
+        }
         case ZLLinkSearch:
             self.tabs.selectedIndex = 1;
             [self.search.navigationController popToRootViewControllerAnimated:NO];
