@@ -4,6 +4,32 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 0.4.0 (2026-10-17)
+
+Streams.
+
+- Play starts the best stream at once. The app asks all addons at the same
+  time, waits at most 8 seconds, and picks the stream that the phone plays
+  best: H.264 up to 1080p plays in hardware. The loading box shows which
+  source plays.
+- When a stream fails, the next best one starts, up to 5 sources.
+- Sources shows all streams, best first. Each stream shows badges for the
+  quality, HDR or Dolby Vision, the codec, the audio, the size, and
+  "Software" or "Too heavy", and all of its text.
+- A stream that is too heavy for the A5 chip does not show. Settings,
+  Playback, Show heavy streams, shows it.
+- Torrent streams do not show. When an addon gives only torrents, the app
+  says to add a debrid key in the settings of the addon.
+- The app sends the headers of an addon (`behaviorHints.proxyHeaders`) with
+  each request of a stream, also for the segments of HLS and DASH.
+- A long press on an episode shows its sources.
+- Settings, Playback: Autoplay, Show heavy streams, Play the next episode,
+  and Audio language.
+- `zettalite://watch?type=TYPE&id=ID` plays the best stream of a title or an
+  episode.
+- A link from another app no longer finds no streams when the addons have
+  not loaded yet.
+
 ## 0.3.0 (2026-10-17)
 
 Stremio addons.
