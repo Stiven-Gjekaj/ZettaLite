@@ -25,30 +25,65 @@ ZettaLite brings the same idea to iOS 6, with these differences:
 - It is written in Objective-C and builds with a command line script, not
   with Gradle.
 
-## Get the SDK
+## Install
 
-1. Download `iPhoneOS9.3.sdk.tar.xz` from the releases of
-   <https://github.com/theos/sdks>.
-2. Unpack it into `sdks/`, so that `sdks/iPhoneOS9.3.sdk` exists.
+You need an iPhone, iPod touch, or iPad with iOS 6 and a jailbreak.
 
-The SDK is third-party code. Git ignores `sdks/`.
+1. Download the `.deb` file from the
+   [latest release](https://github.com/Stiven-Gjekaj/ZettaLite/releases/latest).
+2. Copy it to the phone, for example with `scp` to `/tmp/`.
+3. On the phone, as root: `dpkg -i /tmp/io.github.stivengjekaj.zettalite_*.deb`.
+
+To remove the app: `dpkg -r io.github.stivengjekaj.zettalite`.
+
+## Play a link
+
+Paste a link into the box of the app, and press Play. Other apps and Safari
+bookmarklets can open `zettalite://play?url=URL`, with URL percent-encoded.
 
 ## Build
 
-Run the SDK fix one time after you unpack the SDK:
+You need a Mac with Xcode, the iOS 9.3 SDK of Theos, and `rsvg-convert` and
+`dpkg-deb` from Homebrew. The media tests also need `ffmpeg` on the Mac.
 
-    ./fix-sdk.sh
+1. Download `iPhoneOS9.3.sdk.tar.xz` from the releases of
+   [theos/sdks](https://github.com/theos/sdks/releases) and unpack it into
+   `sdks/`. The result is `sdks/iPhoneOS9.3.sdk`. Git does not track `sdks/`.
+2. Run `./fix-sdk.sh` one time. It changes the SDK stubs for the new Apple
+   linker and for iOS 6.
+3. Build:
 
-Then build a program:
+| Command | Result |
+| ------- | ------ |
+| `scripts/app.sh` | `build/ZettaLite.app`. It builds FFmpeg and mbedTLS the first time. |
+| `scripts/deb.sh` | The Cydia package in `build/` |
+| `scripts/install.sh` | Builds the app, copies it to the phone, and opens it |
+| `scripts/test.sh` | The tests of `src/core`, on the Mac |
+| `scripts/test.sh --phone` | All the tests, on the phone |
+| `ZL_LIVE=1 scripts/test.sh` | Also the tests that use the internet |
+| `scripts/ffmpeg.sh` | FFmpeg as one LGPL dylib in `build/ffmpeg/` |
+| `scripts/mbedtls.sh` | mbedTLS in `build/mbedtls/` |
 
-    ./build.sh OUT SRC.m -framework Foundation
+The phone scripts use `ssh iphone4s`. Set up that host in `~/.ssh/config`,
+for example with a USB tunnel of `iproxy` on port 2222.
 
-`build.sh` makes armv7 code in ARM mode (`-marm`). It compiles each source
-with ARC and links without ARC.
+`build.sh` builds one armv7 binary. It compiles with ARC and links without
+ARC, and all code is in ARM mode (`-marm`). The new Apple linker makes Thumb
+code that crashes on iOS 6 before `main` starts.
 
-## Run on the phone
+To run a tool on the phone:
 
-The phone is at `iphone4s` over SSH (a USB iproxy tunnel on port 2222).
+```
+./build.sh build/X probe/X.m -framework Foundation
+scp build/X iphone4s:/tmp/
+ssh iphone4s 'ldid -S /tmp/X && /tmp/X'
+```
 
-    scp OUT iphone4s:/tmp/
-    ssh iphone4s 'ldid -S /tmp/OUT && /tmp/OUT'
+[docs/architecture.md](docs/architecture.md) tells how the parts fit
+together.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). The app includes FFmpeg (LGPL 2.1), mbedTLS
+(Apache 2.0), and the Mozilla root certificates (MPL 2.0). See
+[docs/architecture.md](docs/architecture.md#third-party-code).
