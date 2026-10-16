@@ -5,8 +5,8 @@
 #import "ZLHomeViewController.h"
 #import "ZLLibraryViewController.h"
 #import "ZLLink.h"
+#import "ZLLiveViewController.h"
 #import "ZLNavigationController.h"
-#import "ZLPlaceholderViewController.h"
 #import "ZLPlayback.h"
 #import "ZLSearchViewController.h"
 #import "ZLSettingsViewController.h"
@@ -42,8 +42,7 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
         [[ZLNavigationController alloc] initWithRootViewController:self.search],
         [[ZLNavigationController alloc] initWithRootViewController:[ZLLibraryViewController new]],
         [[ZLNavigationController alloc] initWithRootViewController:
-            [[ZLPlaceholderViewController alloc] initWithTitle:@"Live TV" image:@"Tab-live" tag:3
-                                                          text:@"The channels of M3U playlists come in version 0.6."]],
+            [ZLLiveViewController new]],
         [[ZLNavigationController alloc] initWithRootViewController:self.settings],
     ];
     self.window.rootViewController = self.tabs;
