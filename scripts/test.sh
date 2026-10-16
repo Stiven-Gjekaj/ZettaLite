@@ -28,8 +28,11 @@ if [ "$1" = "--phone" ]; then
     ssh iphone4s 'mkdir -p /tmp/zltests'
     scp -q "$OUT/zltests-armv7" iphone4s:/tmp/zltests/zltests
     scp -q "$FFMPEG/lib/libzlffmpeg.dylib" iphone4s:/tmp/zltests/
-    if [ -d "$ROOT/tests/media/fixtures" ]; then
-        scp -q -r "$ROOT/tests/media/fixtures" iphone4s:/tmp/zltests/
+    if [ ! -d "$ROOT/build/fixtures" ]; then
+        "$ROOT/scripts/fixtures.sh" >/dev/null
+    fi
+    if ! ssh iphone4s 'test -d /tmp/zltests/fixtures/dash'; then
+        scp -q -r "$ROOT/build/fixtures" iphone4s:/tmp/zltests/
     fi
     ssh iphone4s "cd /tmp/zltests && ldid -S libzlffmpeg.dylib && ldid -S zltests &&
         ZL_LIVE=${ZL_LIVE:-} ./zltests $*"
