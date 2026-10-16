@@ -11,6 +11,8 @@
 @property (nonatomic, readonly) NSUInteger requestCount;
 // When NO, the server ignores Range and sends the full body with 200.
 @property (nonatomic) BOOL acceptsRanges;
+// When NO, the server sends no length and ignores Range, as a live stream does.
+@property (nonatomic) BOOL sendsLength;
 // When YES, a full body comes with chunked transfer encoding.
 @property (nonatomic) BOOL chunked;
 // Bytes per write. A small value makes a slow server.

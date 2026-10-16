@@ -63,7 +63,7 @@ ZL_TEST(test_stream_sends_the_headers_also_after_a_redirect) {
     [server stop];
 }
 
-ZL_TEST(test_stream_skips_to_the_offset_when_the_server_ignores_ranges) {
+ZL_TEST(test_stream_seeks_when_the_server_ignores_ranges) {
     ZLTestServer *server = [ZLTestServer new];
     server.acceptsRanges = NO;
     [server start];
@@ -71,12 +71,16 @@ ZL_TEST(test_stream_skips_to_the_offset_when_the_server_ignores_ranges) {
     NSURL *url = [server serve:body at:@"/d.ts" type:@"video/mp2t"];
     ZLHTTPStream *stream = [[ZLHTTPStream alloc] initWithURL:url headers:nil];
     ZL_EXPECT([stream open:NULL]);
-    ZL_EXPECT(!stream.seekable);
-    [stream seekTo:1500000 error:NULL];
+    // A seek starts again from the start of the file, so it still works.
+    ZL_EXPECT(stream.seekable);
     uint8_t bytes[100];
-    NSInteger count = [stream read:bytes length:sizeof(bytes) error:NULL];
-    ZL_EQUAL_INT(count, 100);
-    ZL_EXPECT(memcmp(bytes, (const uint8_t *)body.bytes + 1500000, 100) == 0);
+    int64_t offsets[] = {1500000, 100, 1900000};
+    for (int i = 0; i < 3; i++) {
+        [stream seekTo:offsets[i] error:NULL];
+        NSInteger count = [stream read:bytes length:sizeof(bytes) error:NULL];
+        ZL_EQUAL_INT(count, 100);
+        ZL_EXPECT(memcmp(bytes, (const uint8_t *)body.bytes + offsets[i], 100) == 0);
+    }
     [stream close];
     [server stop];
 }

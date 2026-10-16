@@ -3,10 +3,10 @@
 #import "ZLLog.h"
 #include <zlib.h>
 
-// The connection stops when it is this far ahead of the reader.
+// The connection waits when it is this far ahead of the reader. Then TCP
+// stops the server until the reader comes near again.
 static const int64_t ZLMaxAhead = 8 * 1024 * 1024;
-// A stopped connection starts again when it is this near to the reader.
-static const int64_t ZLResumeAhead = 2 * 1024 * 1024;
+static const int64_t ZLResumeAhead = 6 * 1024 * 1024;
 // A seek forward by less than this waits for the bytes. A longer seek starts
 // a new connection.
 static const int64_t ZLNearSeek = 512 * 1024;
@@ -43,7 +43,7 @@ static NSString *const ZLUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_1_3 
 @property (nonatomic, copy) NSString *contentType;
 @property (nonatomic) BOOL responded;
 @property (nonatomic) BOOL finished;
-@property (nonatomic) BOOL stopped;  // Stopped because it was far ahead.
+@property (nonatomic) BOOL acceptsRanges;
 @property (nonatomic) BOOL closed;
 @property (nonatomic) int64_t skip;  // Bytes to drop when a server ignores the range.
 @property (nonatomic) NSUInteger generation;
@@ -88,7 +88,6 @@ static NSString *const ZLUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_1_3 
         self.bufferStart = offset;
     }
     self.finished = NO;
-    self.stopped = NO;
     self.error = nil;
     self.skip = 0;
     ZLLog(@"http %@ from %lld", self.URL.lastPathComponent, offset);
@@ -278,16 +277,19 @@ static int64_t ZLTotalFromContentRange(NSString *range) {
     BOOL encoded = encoding.length && ![encoding.lowercaseString isEqualToString:@"identity"];
     int64_t contentLength = head.headers[@"content-length"] ? [head.headers[@"content-length"] longLongValue] : -1;
     if (head.status == 206) {
-        self.seekable = YES;
+        self.acceptsRanges = YES;
         int64_t total = ZLTotalFromContentRange(head.headers[@"content-range"]);
         if (total > 0) self.length = total;
     } else {
-        // The server sends the full file from the start.
+        // The server sends the full file from the start. The stream drops
+        // the bytes before the offset.
         if (contentLength > 0 && !encoded) self.length = contentLength;
-        NSString *ranges = head.headers[@"accept-ranges"];
-        self.seekable = [ranges.lowercaseString isEqualToString:@"bytes"] && self.length > 0 && !encoded;
+        self.acceptsRanges = NO;
         self.skip = offset;
     }
+    // A file with a length can always seek. Without ranges, a seek starts
+    // again from the start of the file and drops the bytes before it.
+    self.seekable = self.acceptsRanges || self.length > 0;
     self.responded = YES;
 }
 
@@ -385,7 +387,7 @@ static BOOL ZLTakeBody(NSMutableData *raw, NSMutableData *body, BOOL chunked, in
     if (compressed) inflateEnd(&zip);
     [connection close];
     [self.condition lock];
-    if ([self isCurrent:generation] && !self.stopped) {
+    if ([self isCurrent:generation]) {
         self.connection = nil;
         if (!done) {
             self.error = error ?: ZLMakeError(ZLErrorMedia, @"The connection failed.");
@@ -413,13 +415,15 @@ static BOOL ZLTakeBody(NSMutableData *raw, NSMutableData *body, BOOL chunked, in
             [self.buffer appendBytes:(const uint8_t *)data.bytes + offset length:data.length - offset];
             self.retries = 0;
         }
-        int64_t end = self.bufferStart + (int64_t)self.buffer.length;
-        if (self.seekable && end - _position > ZLMaxAhead) {
-            self.connection = nil;
-            self.stopped = YES;
-            current = NO;
-        }
         [self.condition broadcast];
+        // Wait while the buffer is far ahead of the reader. A seek or a close
+        // makes this connection old, and then it stops.
+        while ([self isCurrent:generation] &&
+               self.bufferStart + (int64_t)self.buffer.length - _position > ZLMaxAhead) {
+            [self.condition wait];
+            if (self.bufferStart + (int64_t)self.buffer.length - _position < ZLResumeAhead) break;
+        }
+        current = [self isCurrent:generation];
     }
     [self.condition unlock];
     if (!current) [connection close];
@@ -456,7 +460,7 @@ static BOOL ZLTakeBody(NSMutableData *raw, NSMutableData *body, BOOL chunked, in
             memcpy(bytes, (const uint8_t *)self.buffer.bytes + (_position - self.bufferStart), count);
             _position += count;
             [self trim];
-            if (self.stopped && end - _position < ZLResumeAhead) [self startAt:end keep:YES];
+            [self.condition broadcast];
             result = (NSInteger)count;
             break;
         }
@@ -469,12 +473,12 @@ static BOOL ZLTakeBody(NSMutableData *raw, NSMutableData *body, BOOL chunked, in
             break;
         }
         BOOL far = _position < self.bufferStart || _position > end + ZLNearSeek;
-        if (far || self.stopped) {
+        if (far) {
             if (!self.seekable && _position < self.bufferStart) {
                 if (error) *error = ZLMakeError(ZLErrorMedia, @"The server does not accept a seek back.");
                 break;
             }
-            [self startAt:far ? _position : end keep:!far];
+            [self startAt:_position keep:NO];
             until = [NSDate dateWithTimeIntervalSinceNow:self.timeout];
             continue;
         }

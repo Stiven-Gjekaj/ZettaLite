@@ -107,7 +107,7 @@ ZL_TEST(test_remux_gives_a_segment_again_after_a_seek) {
 
 ZL_TEST(test_remux_plays_a_stream_that_cannot_seek_as_live) {
     ZLTestServer *server = ZLFixtureServer();
-    server.acceptsRanges = NO;
+    server.sendsLength = NO;
     ZLRemuxSession *session = Session(server, @"h264-aac.ts");
     ZL_EXPECT(session.live);
     NSString *playlist = [[NSString alloc] initWithData:[session playlist] encoding:NSUTF8StringEncoding];

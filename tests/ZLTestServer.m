@@ -26,6 +26,7 @@ NSData *ZLTestPattern(NSUInteger length) {
         _listenSocket = -1;
         _routes = [NSMutableDictionary dictionary];
         _acceptsRanges = YES;
+        _sendsLength = YES;
         _chunkSize = 65536;
     }
     return self;
@@ -135,7 +136,9 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
             body = route[@"body"];
             end = body.length;
             NSString *range = headers[@"range"];
-            if (self.acceptsRanges && [range hasPrefix:@"bytes="]) {
+            if (!self.sendsLength) {
+                head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\n", route[@"type"]];
+            } else if (self.acceptsRanges && [range hasPrefix:@"bytes="]) {
                 NSArray *parts = [[range substringFromIndex:6] componentsSeparatedByString:@"-"];
                 start = (NSUInteger)[parts[0] longLongValue];
                 if (parts.count > 1 && [parts[1] length]) end = MIN(body.length, (NSUInteger)[parts[1] longLongValue] + 1);
