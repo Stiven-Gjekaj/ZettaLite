@@ -23,3 +23,16 @@ MOVED="_NSCachedURLResponse, _NSHTTPCookie, _NSHTTPCookieStorage, _NSHTTPURLResp
 if ! grep -q '_NSURLConnection,' "$FOUNDATION"; then
     MOVED="$MOVED" perl -0pi -e 's/(objc-classes:\s*\[\s*)/$1$ENV{MOVED}/' "$FOUNDATION"
 fi
+
+# The 9.3 SDK moved some C string functions to libsystem_platform, and its
+# stub exports them only with a "_platform_" prefix. iOS 6 has no
+# libsystem_platform. It exports these functions from libsystem_c, and
+# libSystem re-exports libsystem_c. Add each one to the libsystem_c stub,
+# so that code that calls them links.
+LIBC="$SDK/usr/lib/system/libsystem_c.tbd"
+for name in bcmp bzero memccpy memchr memcmp memcpy memmove memset \
+            memset_pattern4 memset_pattern8 memset_pattern16 strchr strcmp strncmp; do
+    if ! grep -q "[[ ]_${name}," "$LIBC"; then
+        NAME="_$name" perl -0pi -e 's/(symbols:\s*\[\s*)/$1$ENV{NAME}, /' "$LIBC"
+    fi
+done
