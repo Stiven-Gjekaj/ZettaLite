@@ -127,3 +127,16 @@ ZL_TEST(test_stream_speaks_modern_tls) {
     ZL_EXPECT(memcmp(bytes + 4, "ftyp", 4) == 0);
     [stream close];
 }
+
+ZL_TEST(test_stream_asks_for_a_range_from_the_start) {
+    ZLTestServer *server = [ZLTestServer new];
+    [server start];
+    NSURL *url = [server serve:ZLTestPattern(5000) at:@"/e.mp4" type:@"video/mp4"];
+    ZLHTTPStream *stream = [[ZLHTTPStream alloc] initWithURL:url headers:nil];
+    ZL_EXPECT([stream open:NULL]);
+    ZL_EQUAL(server.lastHeaders[@"range"], @"bytes=0-");
+    ZL_EXPECT(stream.seekable);
+    ZL_EQUAL_INT(stream.length, 5000);
+    [stream close];
+    [server stop];
+}

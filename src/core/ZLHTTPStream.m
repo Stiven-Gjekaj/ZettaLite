@@ -130,7 +130,9 @@ static NSString *ZLRequestTarget(NSURL *url) {
     fields[@"Accept"] = @"*/*";
     fields[@"Accept-Encoding"] = @"identity";
     fields[@"Connection"] = @"close";
-    if (offset > 0) fields[@"Range"] = [NSString stringWithFormat:@"bytes=%lld-", offset];
+    // Also the first request asks for a range. Many servers accept ranges
+    // but do not say so in a 200 answer. With a range, they answer 206.
+    fields[@"Range"] = [NSString stringWithFormat:@"bytes=%lld-", offset];
     // The headers of the caller replace the defaults with the same name.
     [self.headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *value, BOOL *stop) {
         for (NSString *name in fields.allKeys) {
