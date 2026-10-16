@@ -4,6 +4,9 @@
 #import "ZLCatalogViewController.h"
 #import "ZLImageLoader.h"
 #import "ZLRowCell.h"
+#import "ZLPlayback.h"
+#import "ZLSettings.h"
+#import "ZLStreamRank.h"
 #import "ZLStreamsViewController.h"
 #import "ZLTheme.h"
 
@@ -19,6 +22,7 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
 @property (nonatomic, strong) UILabel *genresLabel;
 @property (nonatomic, strong) UIButton *playButton;
 @property (nonatomic, strong) UIButton *listButton;
+@property (nonatomic, strong) UIButton *sourcesButton;
 @end
 
 @implementation ZLTitleHeader
@@ -66,21 +70,30 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
         [self addSubview:self.genresLabel];
         CGFloat buttons = width * 9 / 16 + 76;
         self.playButton = [UIButton buttonWithType:UIButtonTypeCustom];
-        self.playButton.frame = CGRectMake(12, buttons, (width - 36) * 0.6, 42);
+        self.playButton.frame = CGRectMake(12, buttons, width - 24 - 84 - 84 - 16, 42);
         self.playButton.backgroundColor = ZLAccentColor();
         self.playButton.layer.cornerRadius = 6;
         self.playButton.titleLabel.font = ZLBoldFont(17);
         [self.playButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
         [self.playButton setTitle:@"Play" forState:UIControlStateNormal];
         [self addSubview:self.playButton];
+        self.sourcesButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.sourcesButton.frame = CGRectMake(width - 12 - 84 - 8 - 84, buttons, 84, 42);
+        self.sourcesButton.layer.cornerRadius = 6;
+        self.sourcesButton.layer.borderWidth = 1;
+        self.sourcesButton.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.4].CGColor;
+        self.sourcesButton.titleLabel.font = ZLBoldFont(14);
+        [self.sourcesButton setTitleColor:ZLTextColor() forState:UIControlStateNormal];
+        [self.sourcesButton setTitle:@"Sources" forState:UIControlStateNormal];
+        [self addSubview:self.sourcesButton];
         self.listButton = [UIButton buttonWithType:UIButtonTypeCustom];
-        self.listButton.frame = CGRectMake(24 + (width - 36) * 0.6, buttons, (width - 36) * 0.4, 42);
+        self.listButton.frame = CGRectMake(width - 12 - 84, buttons, 84, 42);
         self.listButton.layer.cornerRadius = 6;
         self.listButton.layer.borderWidth = 1;
         self.listButton.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.4].CGColor;
-        self.listButton.titleLabel.font = ZLBoldFont(15);
+        self.listButton.titleLabel.font = ZLBoldFont(14);
         [self.listButton setTitleColor:ZLTextColor() forState:UIControlStateNormal];
-        [self.listButton setTitle:@"+ Watchlist" forState:UIControlStateNormal];
+        [self.listButton setTitle:@"+ List" forState:UIControlStateNormal];
         [self addSubview:self.listButton];
     }
     return self;
@@ -186,10 +199,12 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     self.tableView.separatorColor = ZLSurfaceColor();
     [self.tableView registerClass:[ZLEpisodeCell class] forCellReuseIdentifier:@"episode"];
     [self.tableView registerClass:[ZLRowCell class] forCellReuseIdentifier:@"row"];
+    [self.tableView addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(episodePressed:)]];
     self.header = [[ZLTitleHeader alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width,
                                                                    [ZLTitleHeader heightForWidth:self.view.bounds.size.width])];
     [self.header.playButton addTarget:self action:@selector(play) forControlEvents:UIControlEventTouchUpInside];
     [self.header.listButton addTarget:self action:@selector(toggleWatchlist) forControlEvents:UIControlEventTouchUpInside];
+    [self.header.sourcesButton addTarget:self action:@selector(chooseSource) forControlEvents:UIControlEventTouchUpInside];
     self.tableView.tableHeaderView = self.header;
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:self.spinner];
@@ -399,6 +414,15 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     if (indexPath.section == ZLTitleEpisodes) [self playEpisode:self.episodes[(NSUInteger)indexPath.row]];
 }
 
+// A long press on an episode shows its sources.
+- (void)episodePressed:(UILongPressGestureRecognizer *)press {
+    if (press.state != UIGestureRecognizerStateBegan) return;
+    NSIndexPath *path = [self.tableView indexPathForRowAtPoint:[press locationInView:self.tableView]];
+    if (path.section != ZLTitleEpisodes || (NSUInteger)path.row >= self.episodes.count) return;
+    ZLStreamsViewController *streams = [[ZLStreamsViewController alloc] initWithMeta:self.meta episode:self.episodes[(NSUInteger)path.row]];
+    [self.navigationController pushViewController:streams animated:YES];
+}
+
 - (void)rowCell:(ZLRowCell *)cell didSelectMeta:(ZLMeta *)meta atIndex:(NSUInteger)index {
     [self.navigationController pushViewController:[[ZLTitleViewController alloc] initWithMeta:meta] animated:YES];
 }
@@ -409,18 +433,43 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
 #pragma mark - Actions
 
 - (void)play {
-    if ([self isSeries] && self.meta.episodes.count) {
-        // The first episode of the season that shows. The library picks the next one in 0.5.
-        ZLEpisode *first = self.episodes.firstObject ?: self.meta.episodes.firstObject;
-        [self playEpisode:first];
-    } else {
-        [self playEpisode:nil];
-    }
+    // The first episode of the season that shows. The library picks the next one in 0.5.
+    [self playEpisode:[self currentEpisode]];
 }
 
-- (void)playEpisode:(ZLEpisode *)episode {
-    ZLStreamsViewController *streams = [[ZLStreamsViewController alloc] initWithMeta:self.meta episode:episode];
+- (ZLEpisode *)currentEpisode {
+    if (![self isSeries] || !self.meta.episodes.count) return nil;
+    return self.episodes.firstObject ?: self.meta.episodes.firstObject;
+}
+
+- (void)chooseSource {
+    ZLStreamsViewController *streams = [[ZLStreamsViewController alloc] initWithMeta:self.meta episode:[self currentEpisode]];
     [self.navigationController pushViewController:streams animated:YES];
+}
+
+// Plays the best stream at once. When autoplay is off, or when no stream
+// fits the phone, the stream picker shows.
+- (void)playEpisode:(ZLEpisode *)episode {
+    if (![ZLSettings shared].autoplay) {
+        [self.navigationController pushViewController:[[ZLStreamsViewController alloc] initWithMeta:self.meta episode:episode]
+                                             animated:YES];
+        return;
+    }
+    self.header.playButton.enabled = NO;
+    [self.header.playButton setTitle:@"Looking..." forState:UIControlStateNormal];
+    ZLMeta *meta = self.meta;
+    ZLCollectStreams(meta, episode, 8, ^(NSArray *streams) {
+        self.header.playButton.enabled = YES;
+        [self.header.playButton setTitle:@"Play" forState:UIControlStateNormal];
+        ZLRankedStreams *ranked = ZLRankStreams(streams, NO);
+        if (!ranked.streams.count) {
+            [self.navigationController pushViewController:[[ZLStreamsViewController alloc] initWithMeta:meta episode:episode]
+                                                 animated:YES];
+            return;
+        }
+        [ZLPlayback playItems:[ZLStreamsViewController itemsForStreams:ranked.streams from:0 meta:meta episode:episode]
+                         from:self];
+    });
 }
 
 - (void)toggleWatchlist {
