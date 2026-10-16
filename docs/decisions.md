@@ -36,10 +36,23 @@ Each entry gives the reason. The owner made these choices on 2026-10-16.
 - **Request headers.** The local server fetches each stream itself, so it
   sends the headers of an addon's `behaviorHints.proxyHeaders` and of M3U
   `#EXTVLCOPT` lines.
-- **HTTPS with the old trust store.** iOS 6 does not trust newer roots, for
-  example ISRG Root X1 of Let's Encrypt. When a host fails the trust check,
-  the app asks one time for each host before it trusts that host. The app
-  never trusts all hosts silently.
+- **The app speaks TLS with mbedTLS, not with iOS 6** (decided during 0.1,
+  2026-10-17). A test on the iPhone 4S showed two faults of the TLS of
+  iOS 6:
+  - It has no AES-GCM and no ChaCha20. A server that accepts only these
+    ciphers fails the handshake. `download.samplelib.com` is one example.
+  - It does not know newer root certificates, for example ISRG Root X1 of
+    Let's Encrypt.
+
+  mbedTLS 3.6 speaks TLS 1.2 with AES-GCM and ChaCha20. It checks each
+  certificate against the Mozilla root list in `resources/cacert.pem`. So a
+  Let's Encrypt certificate passes with no question.
+- **A certificate that fails the check needs the consent of the user.** The
+  app asks one time for each host before it trusts that host. The app never
+  trusts all hosts silently.
+- **A server that ignores Range still seeks.** The stream starts again from
+  the start of the file and drops the bytes before the position. It is slow
+  on a large file, but it works.
 
 ## The interface
 
@@ -120,6 +133,18 @@ HEVC, VP9, or AV1. RetroTube tested this on the same phone.
   The other choice was to decode in software and encode again to H.264 with
   the hardware encoder. That adds latency and complexity, and the decode
   stays the bottleneck.
+
+### H.264 that the hardware refuses
+
+The hardware decoder of the A5 chip refuses an H.264 stream that needs more
+reference frames than level 4.1 permits: 32768 macroblocks in the decoded
+picture buffer. That is 9 frames at 720p and 4 frames at 1080p. A test on
+the iPhone 4S (2026-10-17) showed a black picture for a 720p file with 16
+reference frames. The same file with 9 reference frames played. A level 5.0
+in the header alone did not stop the decoder.
+
+**Decision: the app reads the SPS of each H.264 stream.** A stream with too
+many reference frames, or with 10-bit samples, goes to the own player.
 
 ### Limits of the A5 chip
 
