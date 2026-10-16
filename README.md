@@ -1,10 +1,15 @@
 # ZettaLite
 
-ZettaLite is a small streaming app for an iPhone 4S on iOS 6.1.3
-(jailbroken). You install it as a .deb package through Cydia.
+ZettaLite is a streaming app for an iPhone 4S on iOS 6.1.3 (jailbroken).
+You install it as a .deb package.
 
-You give the app an HTTP link to a media file or stream. The app plays the
-link with the iOS 6 media player.
+It reads Stremio addons, IPTV playlists, and single media links, and it
+plays their HTTP streams. FFmpeg on the phone changes each stream into a
+form that the iOS 6 player plays. For a codec that the phone cannot decode
+in hardware, the app has its own software player.
+
+The app is in development. [TODO.md](TODO.md) has the plan, and
+[docs/decisions.md](docs/decisions.md) has each decision and its reason.
 
 ## How ZettaLite differs from ZettaStream
 
@@ -12,12 +17,11 @@ ZettaStream is a stream aggregator for Android TV and Android phones. It
 shows the catalogs of Stremio addons, finds streams in all addons, and plays
 IPTV playlists as live TV with a guide. It uses Kotlin and Jetpack Compose.
 
-ZettaLite does much less:
+ZettaLite brings the same idea to iOS 6, with these differences:
 
-- It runs on iOS 6 on an iPhone 4S, not on Android.
-- It takes only HTTP links. It has no addons, no catalogs, and no IPTV
-  playlists.
-- It uses the iOS 6 player. It does not have its own player.
+- It runs on an iPhone 4S, not on Android.
+- It plays HTTP streams only. It has no torrents.
+- It has no profiles, AniSkip, trailers, video filters, or TV guide.
 - It is written in Objective-C and builds with a command line script, not
   with Gradle.
 
