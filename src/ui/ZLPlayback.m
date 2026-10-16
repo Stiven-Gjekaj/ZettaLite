@@ -5,6 +5,9 @@
 #import "ZLInput.h"
 #import "ZLLog.h"
 #import "ZLMediaInfo.h"
+#import "ZLDecodeLimits.h"
+#import "ZLPlayerEngine.h"
+#import "ZLSoftwarePlayerViewController.h"
 #import "ZLRemuxSession.h"
 #import "ZLTheme.h"
 #import "ZLTrust.h"
@@ -174,8 +177,7 @@ static ZLPlayback *ZLCurrentPlayback;
                 [input close];
                 [self showError:@"The video does not play" text:info.reason];
             } else if (info.route == ZLRouteSoftware) {
-                [input close];
-                [self showError:@"The video does not play" text:[info.reason stringByAppendingString:@" The software player comes in a later version."]];
+                [self showSoftwarePlayer:input info:info];
             } else if (!session) {
                 [input close];
                 [self failWith:error];
@@ -224,6 +226,24 @@ static ZLPlayback *ZLCurrentPlayback;
     };
     [self.controller presentMoviePlayerViewControllerAnimated:player];
     if (session) [self end];
+}
+
+// The own player decodes the video in software.
+- (void)showSoftwarePlayer:(ZLInput *)input info:(ZLMediaInfo *)info {
+    ZLLog(@"software player: %@", info.reason);
+    ZLPlayerEngine *engine = [[ZLPlayerEngine alloc] initWithInput:input info:info];
+    NSError *error = nil;
+    if (![engine startAt:self.item.startTime error:&error]) {
+        [engine close];
+        [self showError:@"The video does not play" text:error.localizedDescription];
+        return;
+    }
+    [self.loading removeFromSuperview];
+    self.loading = nil;
+    ZLSoftwarePlayerViewController *player = [[ZLSoftwarePlayerViewController alloc] initWithEngine:engine];
+    player.titleText = self.item.title;
+    [self.controller presentViewController:player animated:YES completion:nil];
+    [self end];
 }
 
 - (void)failWith:(NSError *)error {
