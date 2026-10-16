@@ -143,6 +143,20 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
                                                   @"Content-Range: bytes %lu-%lu/%lu\r\nContent-Length: %lu\r\n",
                                                   route[@"type"], (unsigned long)start, (unsigned long)end - 1,
                                                   (unsigned long)body.length, (unsigned long)(end - start)];
+            } else if (self.chunked) {
+                head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\nTransfer-Encoding: chunked\r\n",
+                                                  route[@"type"]];
+                // Chunks of 1000 bytes, then the last chunk of size 0.
+                NSMutableData *chunks = [NSMutableData data];
+                for (NSUInteger at = 0; at < body.length; at += 1000) {
+                    NSUInteger size = MIN(1000u, body.length - at);
+                    [chunks appendData:[[NSString stringWithFormat:@"%lx\r\n", (unsigned long)size] dataUsingEncoding:NSASCIIStringEncoding]];
+                    [chunks appendData:[body subdataWithRange:NSMakeRange(at, size)]];
+                    [chunks appendBytes:"\r\n" length:2];
+                }
+                [chunks appendBytes:"0\r\n\r\n" length:5];
+                body = chunks;
+                end = body.length;
             } else {
                 head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\n%@Content-Length: %lu\r\n",
                                                   route[@"type"], self.acceptsRanges ? @"Accept-Ranges: bytes\r\n" : @"",

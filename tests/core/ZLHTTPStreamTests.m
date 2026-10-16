@@ -101,3 +101,29 @@ ZL_TEST(test_fetch_reads_a_small_file) {
     ZL_EQUAL(final, url);
     [server stop];
 }
+
+ZL_TEST(test_stream_reads_a_chunked_body) {
+    ZLTestServer *server = [ZLTestServer new];
+    server.chunked = YES;
+    [server start];
+    NSData *body = ZLTestPattern(25500);
+    NSURL *url = [server serve:body at:@"/addon.json" type:@"application/json"];
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    [server stop];
+}
+
+// The TLS of iOS 6 cannot speak to this server: it accepts only AES-GCM, and
+// its certificate comes from Let's Encrypt.
+ZL_TEST(test_stream_speaks_modern_tls) {
+    ZL_LIVE_ONLY();
+    NSURL *url = [NSURL URLWithString:@"https://download.samplelib.com/mp4/sample-5s.mp4"];
+    ZLHTTPStream *stream = [[ZLHTTPStream alloc] initWithURL:url headers:nil];
+    NSError *error = nil;
+    ZL_EXPECT([stream open:&error]);
+    if (error) NSLog(@"%@", error);
+    uint8_t bytes[16];
+    ZL_EQUAL_INT([stream read:bytes length:sizeof(bytes) error:NULL], 16);
+    // An MP4 file has "ftyp" at byte 4.
+    ZL_EXPECT(memcmp(bytes + 4, "ftyp", 4) == 0);
+    [stream close];
+}
