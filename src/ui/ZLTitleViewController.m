@@ -3,12 +3,14 @@
 #import "ZLAddonManager.h"
 #import "ZLCatalogViewController.h"
 #import "ZLImageLoader.h"
+#import "ZLLibrary.h"
 #import "ZLRowCell.h"
 #import "ZLPlayback.h"
 #import "ZLSettings.h"
 #import "ZLStreamRank.h"
 #import "ZLStreamsViewController.h"
 #import "ZLTheme.h"
+#import "ZLWatch.h"
 
 typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTitleMore, ZLTitleSectionCount };
 
@@ -113,6 +115,8 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *overviewLabel;
 @property (nonatomic, strong) NSURL *thumbnailURL;
+@property (nonatomic, strong) UIView *progressTrack;
+@property (nonatomic, strong) UIView *progressBar;
 @end
 
 @implementation ZLEpisodeCell
@@ -146,17 +150,29 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
         self.overviewLabel.backgroundColor = [UIColor clearColor];
         self.overviewLabel.numberOfLines = 2;
         [self.contentView addSubview:self.overviewLabel];
+        self.progressTrack = [[UIView alloc] initWithFrame:CGRectMake(16, 64, 104, 3)];
+        self.progressTrack.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
+        self.progressBar = [UIView new];
+        self.progressBar.backgroundColor = ZLAccentColor();
+        [self.progressTrack addSubview:self.progressBar];
+        [self.contentView addSubview:self.progressTrack];
     }
     return self;
 }
 
 - (void)showEpisode:(ZLEpisode *)episode {
+    double progress = [[ZLLibrary shared] progressOf:episode.identifier];
+    BOOL watched = [[ZLLibrary shared] isWatched:episode.identifier];
+    self.progressTrack.hidden = progress <= 0 || watched;
+    self.progressBar.frame = CGRectMake(0, 0, 104 * (CGFloat)progress, 3);
+    self.thumbnail.alpha = watched ? 0.45 : 1;
     NSString *code = episode.code;
     if (episode.released && [episode.released timeIntervalSinceNow] > 0) {
         NSDateFormatter *formatter = [NSDateFormatter new];
         formatter.dateStyle = NSDateFormatterMediumStyle;
         code = [code stringByAppendingFormat:@"  Comes %@", [formatter stringFromDate:episode.released]];
     }
+    if (watched) code = [code stringByAppendingString:@"  Watched"];
     self.codeLabel.text = code;
     self.nameLabel.text = episode.title ?: [NSString stringWithFormat:@"Episode %ld", (long)episode.episode];
     self.overviewLabel.text = episode.overview;
@@ -181,6 +197,8 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
 @property (nonatomic, strong) NSArray *more;
 @property (nonatomic) BOOL loadingMeta;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
+@property (nonatomic) BOOL seasonChosen;
+@property (nonatomic, strong) ZLEpisode *pressedEpisode;
 @end
 
 @implementation ZLTitleViewController
@@ -193,8 +211,14 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     return self;
 }
 
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(libraryChanged)
+                                                 name:ZLLibraryDidChangeNotification object:nil];
     self.tableView.backgroundColor = ZLBackgroundColor();
     self.tableView.separatorColor = ZLSurfaceColor();
     [self.tableView registerClass:[ZLEpisodeCell class] forCellReuseIdentifier:@"episode"];
@@ -221,6 +245,7 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
         [self.spinner stopAnimating];
         if (!meta) return;
         self.meta = meta;
+        [[ZLLibrary shared] updateMeta:meta];
         [self showMeta];
     }];
 }
@@ -241,7 +266,11 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
         if (image) self.header.backdrop.image = image;
     }];
     NSArray *seasons = meta.seasons;
+    // Show the season of the next episode.
+    ZLEpisode *next = [[ZLLibrary shared] nextEpisodeOf:meta];
+    if (next && !self.seasonChosen) self.season = next.season;
     if (seasons.count && ![seasons containsObject:@(self.season)]) self.season = [seasons.firstObject integerValue];
+    [self updateButtons];
     self.episodes = [meta episodesOfSeason:self.season];
     [self.tableView reloadData];
 }
@@ -359,6 +388,7 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
 }
 
 - (void)seasonChanged:(UISegmentedControl *)control {
+    self.seasonChosen = YES;
     self.season = [self.meta.seasons[(NSUInteger)control.selectedSegmentIndex] integerValue];
     self.episodes = [self.meta episodesOfSeason:self.season];
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:ZLTitleEpisodes] withRowAnimation:UITableViewRowAnimationNone];
@@ -375,7 +405,12 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
 }
 
 - (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)index {
+    if (sheet.tag == 1) {
+        [self episodeAction:index sheet:sheet];
+        return;
+    }
     if (index == sheet.cancelButtonIndex || index >= (NSInteger)self.meta.seasons.count) return;
+    self.seasonChosen = YES;
     self.season = [self.meta.seasons[(NSUInteger)index] integerValue];
     self.episodes = [self.meta episodesOfSeason:self.season];
     [self.tableView reloadData];
@@ -414,13 +449,63 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     if (indexPath.section == ZLTitleEpisodes) [self playEpisode:self.episodes[(NSUInteger)indexPath.row]];
 }
 
-// A long press on an episode shows its sources.
+// A long press on an episode shows its sources and the watched mark.
 - (void)episodePressed:(UILongPressGestureRecognizer *)press {
     if (press.state != UIGestureRecognizerStateBegan) return;
     NSIndexPath *path = [self.tableView indexPathForRowAtPoint:[press locationInView:self.tableView]];
     if (path.section != ZLTitleEpisodes || (NSUInteger)path.row >= self.episodes.count) return;
-    ZLStreamsViewController *streams = [[ZLStreamsViewController alloc] initWithMeta:self.meta episode:self.episodes[(NSUInteger)path.row]];
-    [self.navigationController pushViewController:streams animated:YES];
+    self.pressedEpisode = self.episodes[(NSUInteger)path.row];
+    BOOL watched = [[ZLLibrary shared] isWatched:self.pressedEpisode.identifier];
+    UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:[self.pressedEpisode code] delegate:self cancelButtonTitle:nil
+                                         destructiveButtonTitle:nil otherButtonTitles:@"Play", @"Sources",
+                                                                watched ? @"Mark as not watched" : @"Mark as watched",
+                                                                @"Mark the episodes before as watched", nil];
+    sheet.cancelButtonIndex = [sheet addButtonWithTitle:@"Cancel"];
+    sheet.tag = 1;
+    [sheet showFromTabBar:self.tabBarController.tabBar];
+}
+
+- (void)episodeAction:(NSInteger)index sheet:(UIActionSheet *)sheet {
+    ZLEpisode *episode = self.pressedEpisode;
+    if (index == sheet.cancelButtonIndex || !episode) return;
+    ZLLibrary *library = [ZLLibrary shared];
+    if (index == 0) {
+        [self playEpisode:episode];
+    } else if (index == 1) {
+        [self.navigationController pushViewController:[[ZLStreamsViewController alloc] initWithMeta:self.meta episode:episode]
+                                             animated:YES];
+    } else if (index == 2) {
+        [library setVideo:episode.identifier ofMeta:self.meta watched:![library isWatched:episode.identifier]];
+    } else if (index == 3) {
+        for (ZLEpisode *each in self.meta.episodes) {
+            if (each.season == 0 || each == episode) continue;
+            if (each.season < episode.season || (each.season == episode.season && each.episode < episode.episode)) {
+                [library setVideo:each.identifier ofMeta:self.meta watched:YES];
+            }
+        }
+    }
+}
+
+- (void)libraryChanged {
+    [self updateButtons];
+    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:ZLTitleEpisodes] withRowAnimation:UITableViewRowAnimationNone];
+}
+
+// Play names the episode that plays. A film with progress says Resume.
+- (void)updateButtons {
+    ZLLibrary *library = [ZLLibrary shared];
+    NSString *play = @"Play";
+    if ([self isSeries]) {
+        ZLEpisode *next = [library nextEpisodeOf:self.meta];
+        if (next) play = [library positionOf:next.identifier] > 30 ? [@"Resume " stringByAppendingString:[next code]]
+                                                                    : [@"Play " stringByAppendingString:[next code]];
+    } else if ([library positionOf:self.meta.identifier] > 30) {
+        play = @"Resume";
+    }
+    [self.header.playButton setTitle:play forState:UIControlStateNormal];
+    BOOL listed = [library isInWatchlist:self.meta.identifier];
+    [self.header.listButton setTitle:listed ? @"In list" : @"+ List" forState:UIControlStateNormal];
+    self.header.listButton.backgroundColor = listed ? [UIColor colorWithWhite:0.2 alpha:1] : [UIColor clearColor];
 }
 
 - (void)rowCell:(ZLRowCell *)cell didSelectMeta:(ZLMeta *)meta atIndex:(NSUInteger)index {
@@ -437,9 +522,10 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     [self playEpisode:[self currentEpisode]];
 }
 
+// The next episode to watch, or the first episode.
 - (ZLEpisode *)currentEpisode {
     if (![self isSeries] || !self.meta.episodes.count) return nil;
-    return self.episodes.firstObject ?: self.meta.episodes.firstObject;
+    return [[ZLLibrary shared] nextEpisodeOf:self.meta] ?: self.episodes.firstObject ?: self.meta.episodes.firstObject;
 }
 
 - (void)chooseSource {
@@ -447,9 +533,9 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     [self.navigationController pushViewController:streams animated:YES];
 }
 
-// Plays the best stream at once. When autoplay is off, or when no stream
-// fits the phone, the stream picker shows.
+// Plays the best stream at once. When autoplay is off, the stream picker shows.
 - (void)playEpisode:(ZLEpisode *)episode {
+    // The library keeps the full title, with its episodes.
     if (![ZLSettings shared].autoplay) {
         [self.navigationController pushViewController:[[ZLStreamsViewController alloc] initWithMeta:self.meta episode:episode]
                                              animated:YES];
@@ -457,22 +543,16 @@ typedef NS_ENUM(NSInteger, ZLTitleSection) { ZLTitleAbout, ZLTitleEpisodes, ZLTi
     }
     self.header.playButton.enabled = NO;
     [self.header.playButton setTitle:@"Looking..." forState:UIControlStateNormal];
-    ZLMeta *meta = self.meta;
-    ZLCollectStreams(meta, episode, 8, ^(NSArray *streams) {
+    [ZLWatch autoplay:self.meta episode:episode bingeGroup:nil from:self];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         self.header.playButton.enabled = YES;
-        [self.header.playButton setTitle:@"Play" forState:UIControlStateNormal];
-        ZLRankedStreams *ranked = ZLRankStreams(streams, NO);
-        if (!ranked.streams.count) {
-            [self.navigationController pushViewController:[[ZLStreamsViewController alloc] initWithMeta:meta episode:episode]
-                                                 animated:YES];
-            return;
-        }
-        [ZLPlayback playItems:[ZLStreamsViewController itemsForStreams:ranked.streams from:0 meta:meta episode:episode]
-                         from:self];
+        [self updateButtons];
     });
 }
 
 - (void)toggleWatchlist {
+    ZLLibrary *library = [ZLLibrary shared];
+    [library setMeta:self.meta inWatchlist:![library isInWatchlist:self.meta.identifier]];
 }
 
 @end
