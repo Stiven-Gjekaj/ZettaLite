@@ -1,4 +1,5 @@
 #import "ZLMediaInfo.h"
+#import "ZLH264.h"
 #include <libavutil/pixdesc.h>
 
 @implementation ZLTrack
@@ -73,6 +74,15 @@ static NSString *ZLWhyNotHardware(AVCodecParameters *codec, ZLTrack *track) {
     if (track.bitDepth > 8) return @"The phone has no hardware decoder for 10-bit H.264.";
     if (codec->profile == AV_PROFILE_H264_HIGH_422 || codec->profile == AV_PROFILE_H264_HIGH_444_PREDICTIVE) return @"The phone has no hardware decoder for this H.264 profile.";
     if (codec->width > 1920 || codec->height > 1088) return @"The video is larger than 1080p.";
+    ZLH264Info sps;
+    if (ZLParseH264Extradata(codec->extradata, (size_t)codec->extradata_size, &sps)) {
+        if (sps.bitDepth > 8) return @"The phone has no hardware decoder for 10-bit H.264.";
+        int limit = ZLH264HardwareRefLimit(codec->width, codec->height);
+        if (sps.refs > limit) {
+            return [NSString stringWithFormat:@"The video uses %d reference frames. The hardware decoder accepts %d at this size.",
+                                              sps.refs, limit];
+        }
+    }
     return nil;
 }
 
