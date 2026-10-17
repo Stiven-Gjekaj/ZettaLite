@@ -1,5 +1,6 @@
 #import "ZLTest.h"
 #import "ZLAddon.h"
+#import "ZLLink.h"
 #import "ZLMeta.h"
 
 static ZLAddon *Cinemeta(void) {
@@ -49,7 +50,7 @@ ZL_TEST(test_addon_makes_the_urls_of_the_protocol) {
 
 ZL_TEST(test_addon_keeps_the_query_of_a_configured_addon) {
     ZLAddon *addon = [ZLAddon addonWithManifest:@{ @"id": @"x" }
-                                            URL:[NSURL URLWithString:@"https://example.org/key=abc|lang=en/manifest.json"]];
+                                            URL:ZLMediaURLFromText(@"https://example.org/key=abc|lang=en/manifest.json")];
     ZL_EQUAL([addon URLForResource:@"meta" type:@"movie" identifier:@"tt1"].absoluteString,
              @"https://example.org/key=abc%7Clang=en/meta/movie/tt1.json");
 }
