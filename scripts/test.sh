@@ -31,7 +31,7 @@ if [ "$1" = "--phone" ]; then
     "$ROOT/build.sh" "$OUT/zltests-armv7" -I"$ROOT/src/core" -I"$ROOT/src/media" -I"$ROOT/tests" -I"$FFMPEG/include" \
         -I"$TLS/include" -I"$ROOT/src/tls" $CORE $MEDIA $CORE_TESTS $MEDIA_TESTS "$FFMPEG/lib/libzlffmpeg.dylib" \
         "$TLS/ios/libmbedtls.a" -lz \
-        -framework Foundation -framework Security -framework AudioToolbox >"$OUT/build.log" 2>&1 ||
+        -framework Foundation -framework Security -framework AudioToolbox -framework CoreGraphics >"$OUT/build.log" 2>&1 ||
         { grep -v 'liblaunch.dylib' "$OUT/build.log" >&2; exit 1; }
     ssh iphone4s 'mkdir -p /tmp/zltests'
     scp -q "$OUT/zltests-armv7" iphone4s:/tmp/zltests/zltests
