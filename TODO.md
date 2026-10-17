@@ -52,7 +52,7 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 - Add the next episode with a countdown, and the "New episodes" row.
 - Add backup and restore of the library.
 
-## 0.6: IPTV
+## 0.6: IPTV (done, 2026-10-17)
 
 - Read M3U playlists, with the headers of `#EXTVLCOPT` lines.
 - Add the Live TV tab with the channels in a table.
