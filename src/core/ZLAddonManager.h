@@ -8,8 +8,17 @@
 
 extern NSString *const ZLAddonsDidChangeNotification;
 
-// Fetches a URL and reads it as JSON in the background.
+typedef NS_ENUM(NSInteger, ZLFetchPriority) {
+    // Catalogs and search. A search asks many catalogs at the same time.
+    ZLFetchNormal,
+    // A request that the viewer waits for: a manifest, a title, the streams,
+    // or the subtitles. It goes before the normal requests that wait.
+    ZLFetchHigh,
+};
+
+// Fetches a URL and reads it as JSON in the background, with normal priority.
 void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error));
+void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^completion)(id json, NSError *error));
 
 @interface ZLAddonManager : NSObject
 

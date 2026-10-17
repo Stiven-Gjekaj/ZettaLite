@@ -36,3 +36,25 @@ ZL_TEST(test_fetch_json_reports_an_answer_that_is_not_json) {
     ZL_EXPECT(failure != nil);
     [server stop];
 }
+
+ZL_TEST(test_fetch_puts_a_high_request_before_the_normal_ones_that_wait) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSURL *url = [server serve:[@"{}" dataUsingEncoding:NSUTF8StringEncoding] at:@"/a.json" type:@"application/json"];
+    // Each answer takes a moment, so that the normal requests wait in the queue.
+    server.delay = 0.2;
+    NSMutableArray *order = [NSMutableArray array];
+    for (int i = 0; i < 12; i++) {
+        ZLFetchJSON(url, ^(id json, NSError *error) { [order addObject:@"normal"]; });
+    }
+    ZLFetchJSONWithPriority(url, ZLFetchHigh, ^(id json, NSError *error) { [order addObject:@"high"]; });
+    NSDate *until = [NSDate dateWithTimeIntervalSinceNow:10];
+    while (order.count < 13 && [until timeIntervalSinceNow] > 0) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+    }
+    ZL_EQUAL_INT(order.count, 13);
+    // At most 4 requests run at the same time. The high request starts next.
+    NSUInteger high = [order indexOfObject:@"high"];
+    ZL_EXPECT(high != NSNotFound && high < 8);
+    [server stop];
+}

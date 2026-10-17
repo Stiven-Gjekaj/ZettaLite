@@ -24,7 +24,11 @@ static NSOperationQueue *ZLNetworkQueue(void) {
 }
 
 void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
-    [ZLNetworkQueue() addOperationWithBlock:^{
+    ZLFetchJSONWithPriority(url, ZLFetchNormal, completion);
+}
+
+void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^completion)(id json, NSError *error)) {
+    NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
         NSError *error = nil;
         NSData *data = [ZLHTTPStream fetch:url headers:@{ @"Accept": @"application/json" } finalURL:NULL error:&error];
         id json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
@@ -32,6 +36,8 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
         if (error) ZLLog(@"json %@: %@", url, error.localizedDescription);
         dispatch_async(dispatch_get_main_queue(), ^{ completion(json, json ? nil : error); });
     }];
+    operation.queuePriority = priority == ZLFetchHigh ? NSOperationQueuePriorityHigh : NSOperationQueuePriorityNormal;
+    [ZLNetworkQueue() addOperation:operation];
 }
 
 @interface ZLAddonManager ()
@@ -89,7 +95,10 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
     NSMutableDictionary *failures = [NSMutableDictionary dictionary];
     for (ZLSource *source in sources) {
         NSString *key = source.URL.absoluteString;
-        ZLFetchJSON(source.URL, ^(id json, NSError *error) {
+        // A refresh of a manifest on the phone must not hold back the requests
+        // that the viewer waits for. A new manifest is one of them.
+        ZLFetchPriority priority = manifests[key] ? ZLFetchNormal : ZLFetchHigh;
+        ZLFetchJSONWithPriority(source.URL, priority, ^(id json, NSError *error) {
             if (generation != self.generation) return;
             if ([json isKindOfClass:[NSDictionary class]] && (json[@"id"] || json[@"catalogs"] || json[@"resources"])) {
                 manifests[key] = json;
@@ -213,7 +222,7 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
     }
     ZLAddon *addon = addons.firstObject;
     [addons removeObjectAtIndex:0];
-    ZLFetchJSON([addon URLForResource:@"meta" type:type identifier:identifier], ^(id json, NSError *error) {
+    ZLFetchJSONWithPriority([addon URLForResource:@"meta" type:type identifier:identifier], ZLFetchHigh, ^(id json, NSError *error) {
         ZLMeta *meta = [ZLMeta metaWithJSON:ZLJSONDictionary(json, @"meta")];
         if (meta) {
             meta.addon = addon;
@@ -241,7 +250,7 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
         return;
     }
     for (ZLAddon *addon in addons) {
-        ZLFetchJSON([addon URLForResource:@"stream" type:type identifier:identifier], ^(id json, NSError *error) {
+        ZLFetchJSONWithPriority([addon URLForResource:@"stream" type:type identifier:identifier], ZLFetchHigh, ^(id json, NSError *error) {
             NSMutableArray *streams = [NSMutableArray array];
             for (NSDictionary *item in ZLJSONArray(json, @"streams")) {
                 ZLStream *stream = [ZLStream streamWithJSON:item];
@@ -272,7 +281,7 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
         return;
     }
     for (ZLAddon *addon in addons) {
-        ZLFetchJSON([addon URLForResource:@"subtitles" type:type identifier:identifier], ^(id json, NSError *error) {
+        ZLFetchJSONWithPriority([addon URLForResource:@"subtitles" type:type identifier:identifier], ZLFetchHigh, ^(id json, NSError *error) {
             for (NSDictionary *item in ZLJSONArray(json, @"subtitles")) {
                 if (ZLJSONString(item, @"url")) [subtitles addObject:item];
             }
