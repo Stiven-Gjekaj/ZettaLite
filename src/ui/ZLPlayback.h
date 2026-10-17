@@ -16,6 +16,11 @@
 @property (nonatomic, copy) NSString *bingeGroup;
 // The second at which the playback starts. 0 starts at the start.
 @property (nonatomic) double startTime;
+// The subtitles that the stream gives: dictionaries with url and lang.
+@property (nonatomic, copy) NSArray *subtitles;
+// The Stremio type and video ID. The player asks the subtitle addons with them.
+@property (nonatomic, copy) NSString *videoType;
+@property (nonatomic, copy) NSString *videoID;
 // Called when the player closes, with the second where it stopped, the length,
 // and YES when the media played to its end.
 @property (nonatomic, copy) void (^onClose)(double position, double duration, BOOL ended);

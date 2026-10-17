@@ -111,6 +111,9 @@ static const int ZLCountdownSeconds = 10;
         ZLPlayItem *item = [ZLPlayItem itemWithURL:stream.URL title:[self titleOf:meta episode:episode]];
         item.headers = stream.headers;
         item.bingeGroup = stream.bingeGroup;
+        item.subtitles = stream.subtitles;
+        item.videoType = meta.type;
+        item.videoID = video;
         NSString *name = [stream.name stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
         item.sourceName = name.length ? [NSString stringWithFormat:@"%@: %@", stream.addonName, name] : stream.addonName;
         // Start where the video stopped, a few seconds before.
