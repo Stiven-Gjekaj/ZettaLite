@@ -172,3 +172,39 @@ ZL_TEST(test_fetch_does_not_try_again_after_an_http_error) {
     ZL_EQUAL_INT(server.requestCount, 1);
     [server stop];
 }
+
+ZL_TEST(test_fetch_uses_one_connection_for_many_requests) {
+    ZLTestServer *server = [ZLTestServer new];
+    server.keepsAlive = YES;
+    ZL_EXPECT([server start]);
+    NSData *body = ZLTestPattern(5000);
+    NSURL *url = [server serve:body at:@"/a.json" type:@"application/json"];
+    for (int i = 0; i < 3; i++) ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    ZL_EQUAL_INT(server.requestCount, 3);
+    ZL_EQUAL_INT(server.connectionCount, 1);
+    // A chunked answer also keeps the connection.
+    server.chunked = YES;
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    ZL_EQUAL_INT(server.connectionCount, 1);
+    [server stop];
+}
+
+ZL_TEST(test_fetch_connects_again_when_the_server_closed_the_idle_connection) {
+    ZLTestServer *server = [ZLTestServer new];
+    server.keepsAlive = YES;
+    ZL_EXPECT([server start]);
+    NSData *body = ZLTestPattern(100);
+    NSURL *url = [server serve:body at:@"/a.json" type:@"application/json"];
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    [server closeIdleConnections];
+    [NSThread sleepForTimeInterval:0.1];
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    ZL_EQUAL_INT(server.connectionCount, 2);
+    // A server that closes after each answer gets a new connection each time.
+    // The first of these fetches still uses the open connection.
+    server.keepsAlive = NO;
+    for (int i = 0; i < 3; i++) ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    ZL_EQUAL_INT(server.connectionCount, 4);
+    [server stop];
+}
+

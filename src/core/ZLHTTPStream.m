@@ -22,6 +22,7 @@ static NSString *const ZLUserAgent = @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_1_3 
 // The head of a response.
 @interface ZLResponseHead : NSObject
 @property (nonatomic) NSInteger status;
+@property (nonatomic, copy) NSString *version;  // For example "HTTP/1.1".
 @property (nonatomic, strong) NSDictionary *headers;  // Names in lower case.
 @end
 
@@ -174,6 +175,7 @@ static ZLResponseHead *ZLReadHead(ZLConnection *connection, NSMutableData *body,
     NSArray *words = [lines.firstObject componentsSeparatedByString:@" "];
     ZLResponseHead *head = [ZLResponseHead new];
     head.status = words.count >= 2 ? [words[1] integerValue] : 0;
+    head.version = words.firstObject;
     NSMutableDictionary *headers = [NSMutableDictionary dictionary];
     for (NSUInteger i = 1; i < lines.count; i++) {
         NSString *line = lines[i];
@@ -544,23 +546,198 @@ static BOOL ZLCanRetry(NSError *error) {
     return error.code != ZLErrorUntrustedHost && error.code != ZLErrorHTTPStatus && error.code != ZLErrorCancelled;
 }
 
-+ (NSData *)fetchOnce:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
-    ZLHTTPStream *stream = [[ZLHTTPStream alloc] initWithURL:url headers:headers];
-    if (![stream open:error]) return nil;
-    NSMutableData *data = [NSMutableData data];
-    uint8_t chunk[16384];
-    while (YES) {
-        NSInteger count = [stream read:chunk length:sizeof(chunk) error:error];
-        if (count < 0) {
-            [stream close];
+#pragma mark - Small fetches
+
+// A small fetch keeps its connection open for the next fetch to the same
+// host. On the A5 chip a new TLS connection costs about half a second.
+static const NSTimeInterval ZLIdleLifetime = 15;
+static const NSUInteger ZLMaxIdlePerHost = 4;
+// The longest body that a small fetch reads.
+static const NSUInteger ZLMaxFetch = 32 * 1024 * 1024;
+
+static NSMutableDictionary *ZLIdleTable(void) {
+    static NSMutableDictionary *table;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ table = [NSMutableDictionary dictionary]; });
+    return table;
+}
+
+static NSString *ZLHostKey(NSURL *url) {
+    BOOL tls = [url.scheme.lowercaseString isEqualToString:@"https"];
+    int port = url.port ? url.port.intValue : (tls ? 443 : 80);
+    return [NSString stringWithFormat:@"%@://%@:%d", tls ? @"https" : @"http", url.host.lowercaseString, port];
+}
+
+// Takes the newest idle connection to the host, or returns nil.
+static ZLConnection *ZLTakeIdle(NSString *key) {
+    NSMutableDictionary *table = ZLIdleTable();
+    @synchronized (table) {
+        NSMutableArray *list = table[key];
+        while (list.count) {
+            NSArray *entry = list.lastObject;
+            [list removeLastObject];
+            if (-[entry[1] timeIntervalSinceNow] < ZLIdleLifetime) return entry[0];
+            [entry[0] close];
+        }
+        return nil;
+    }
+}
+
+static void ZLKeepIdle(NSString *key, ZLConnection *connection) {
+    NSMutableDictionary *table = ZLIdleTable();
+    @synchronized (table) {
+        NSMutableArray *list = table[key] ?: [NSMutableArray array];
+        table[key] = list;
+        [list addObject:@[ connection, [NSDate date] ]];
+        while (list.count > ZLMaxIdlePerHost) {
+            [list[0][0] close];
+            [list removeObjectAtIndex:0];
+        }
+    }
+}
+
+static NSData *ZLFetchRequest(NSURL *url, NSDictionary *headers) {
+    BOOL tls = [url.scheme.lowercaseString isEqualToString:@"https"];
+    NSString *host = url.host;
+    if (url.port && url.port.intValue != (tls ? 443 : 80)) host = [host stringByAppendingFormat:@":%@", url.port];
+    NSMutableDictionary *fields = [NSMutableDictionary dictionary];
+    fields[@"Host"] = host;
+    fields[@"User-Agent"] = ZLUserAgent;
+    fields[@"Accept"] = @"*/*";
+    fields[@"Accept-Encoding"] = @"identity";
+    fields[@"Connection"] = @"keep-alive";
+    [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *value, BOOL *stop) {
+        for (NSString *name in fields.allKeys) {
+            if ([name caseInsensitiveCompare:key] == NSOrderedSame) [fields removeObjectForKey:name];
+        }
+        fields[key] = value;
+    }];
+    NSMutableString *text = [NSMutableString stringWithFormat:@"GET %@ HTTP/1.1\r\n", ZLRequestTarget(url)];
+    [fields enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *value, BOOL *stop) {
+        [text appendFormat:@"%@: %@\r\n", key, value];
+    }];
+    [text appendString:@"\r\n"];
+    return [text dataUsingEncoding:NSUTF8StringEncoding];
+}
+
+// Reads a full body: with a length, chunked, or up to the close. Inflates
+// gzip. Sets reusable to YES when the connection can carry a next request.
+static NSData *ZLReadBody(ZLConnection *connection, ZLResponseHead *head, NSData *first, BOOL *reusable, NSError **error) {
+    *reusable = NO;
+    NSString *transfer = [head.headers[@"transfer-encoding"] lowercaseString];
+    BOOL chunked = transfer && [transfer rangeOfString:@"chunked"].location != NSNotFound;
+    NSString *encoding = [head.headers[@"content-encoding"] lowercaseString];
+    BOOL compressed = [encoding isEqualToString:@"gzip"] || [encoding isEqualToString:@"deflate"];
+    int64_t left = (!chunked && head.headers[@"content-length"]) ? [head.headers[@"content-length"] longLongValue] : -1;
+    int64_t chunkLeft = 0;
+    NSMutableData *raw = [first mutableCopy];
+    NSMutableData *body = [NSMutableData data];
+    BOOL done = (!chunked && left == 0) || head.status == 204 || head.status == 304;
+    uint8_t chunk[32768];
+    while (!done) {
+        done = ZLTakeBody(raw, body, chunked, &left, &chunkLeft);
+        if (done) break;
+        if (body.length > ZLMaxFetch) {
+            if (error) *error = ZLMakeError(ZLErrorMedia, @"The answer is too large.");
             return nil;
         }
-        if (count == 0) break;
-        [data appendBytes:chunk length:(NSUInteger)count];
+        NSInteger count = [connection read:chunk length:sizeof(chunk) error:error];
+        if (count < 0) return nil;
+        if (count == 0) {
+            // A body with no length ends when the server closes.
+            if (left < 0 && !chunked) break;
+            if (error) *error = ZLMakeError(ZLErrorMedia, @"The server closed the connection early.");
+            return nil;
+        }
+        [raw appendBytes:chunk length:(NSUInteger)count];
     }
-    [stream close];
-    if (finalURL) *finalURL = stream.finalURL;
-    return data;
+    NSString *connectionHeader = [head.headers[@"connection"] lowercaseString];
+    BOOL closes = [connectionHeader isEqualToString:@"close"] ||
+                  ([head.version isEqualToString:@"HTTP/1.0"] && ![connectionHeader isEqualToString:@"keep-alive"]);
+    // Bytes after the body mean a server that the app does not understand.
+    *reusable = done && !closes && (chunked || left >= 0) && raw.length == 0;
+    if (!compressed) return body;
+    z_stream zip;
+    memset(&zip, 0, sizeof(zip));
+    inflateInit2(&zip, 15 + 32);  // 32: a gzip or a zlib header.
+    NSMutableData *plain = [NSMutableData dataWithCapacity:body.length * 4];
+    zip.next_in = (Bytef *)body.bytes;
+    zip.avail_in = (uInt)body.length;
+    uint8_t out[32768];
+    int status = Z_OK;
+    while (zip.avail_in > 0 && status != Z_STREAM_END) {
+        zip.next_out = out;
+        zip.avail_out = sizeof(out);
+        status = inflate(&zip, Z_NO_FLUSH);
+        [plain appendBytes:out length:sizeof(out) - zip.avail_out];
+        if (status != Z_OK && status != Z_STREAM_END && status != Z_BUF_ERROR) break;
+        if (status == Z_BUF_ERROR && zip.avail_out != 0) break;
+    }
+    inflateEnd(&zip);
+    if (status != Z_STREAM_END && status != Z_OK) {
+        if (error) *error = ZLMakeError(ZLErrorMedia, @"The server sent compressed data that the app cannot read.");
+        return nil;
+    }
+    return plain;
+}
+
++ (NSData *)fetchOnce:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
+    for (int redirects = 0; redirects <= ZLMaxRedirects; redirects++) {
+        if (!url.host) {
+            if (error) *error = ZLMakeError(ZLErrorMedia, @"The link has no host.");
+            return nil;
+        }
+        NSString *key = ZLHostKey(url);
+        ZLConnection *connection = ZLTakeIdle(key);
+        BOOL reused = connection != nil;
+        NSData *request = ZLFetchRequest(url, headers);
+        NSMutableData *first = [NSMutableData data];
+        ZLResponseHead *head = nil;
+        // An idle connection can be closed by the server already. Then the
+        // fetch tries one time more with a new connection.
+        for (int attempt = 0; attempt < 2 && !head; attempt++) {
+            if (!connection) {
+                BOOL tls = [url.scheme.lowercaseString isEqualToString:@"https"];
+                int port = url.port ? url.port.intValue : (tls ? 443 : 80);
+                connection = [ZLConnection connectToHost:url.host port:port tls:tls trust:[ZLTrust shared] timeout:20 error:error];
+                if (!connection) return nil;
+                reused = NO;
+            }
+            [first setLength:0];
+            if ([connection writeData:request error:error]) head = ZLReadHead(connection, first, error);
+            if (!head) {
+                [connection close];
+                connection = nil;
+                if (!reused) return nil;
+            }
+        }
+        if (!head) return nil;
+        ZLLog(@"fetch %@ status %ld%@", url.lastPathComponent, (long)head.status, reused ? @", same connection" : @"");
+        NSString *location = head.headers[@"location"];
+        if (head.status >= 300 && head.status < 400 && location.length) {
+            [connection close];
+            url = [NSURL URLWithString:location relativeToURL:url].absoluteURL;
+            if (!url) {
+                if (error) *error = ZLMakeError(ZLErrorMedia, @"The server sent a redirect that the app cannot read.");
+                return nil;
+            }
+            continue;
+        }
+        if (head.status >= 400) {
+            [connection close];
+            if (error) *error = ZLMakeError(ZLErrorHTTPStatus, [NSString stringWithFormat:@"The server answered with HTTP %ld.", (long)head.status]);
+            return nil;
+        }
+        BOOL reusable = NO;
+        NSData *body = ZLReadBody(connection, head, first, &reusable, error);
+        if (body && reusable) ZLKeepIdle(key, connection);
+        else [connection close];
+        if (!body) return nil;
+        if (finalURL) *finalURL = url;
+        return body;
+    }
+    if (error) *error = ZLMakeError(ZLErrorMedia, @"The server sent too many redirects.");
+    return nil;
 }
 
 + (NSData *)fetch:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
