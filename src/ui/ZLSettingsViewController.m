@@ -4,6 +4,7 @@
 #import "ZLLinkViewController.h"
 #import "ZLLog.h"
 #import "ZLSettings.h"
+#import "ZLChannels.h"
 #import "ZLSources.h"
 #import "ZLTheme.h"
 #import "ZLTrust.h"
@@ -288,13 +289,15 @@
     if (settings.audioLanguage) values[@"audioLanguage"] = settings.audioLanguage;
     if (settings.subtitleLanguage) values[@"subtitleLanguage"] = settings.subtitleLanguage;
     return @{ @"app": @"ZettaLite", @"version": @1, @"library": [[ZLLibrary shared] backup],
-              @"sources": [[ZLSourceList shared] text], @"trustedHosts": [[ZLTrust shared] hosts], @"settings": values };
+              @"sources": [[ZLSourceList shared] text], @"trustedHosts": [[ZLTrust shared] hosts], @"favourites": [[ZLChannelList shared] favouriteKeys],
+              @"settings": values };
 }
 
 + (BOOL)restore:(NSDictionary *)backup {
     if (![backup isKindOfClass:[NSDictionary class]] || ![backup[@"app"] isEqual:@"ZettaLite"]) return NO;
     if (![[ZLLibrary shared] restore:backup[@"library"]]) return NO;
     if ([backup[@"sources"] isKindOfClass:[NSString class]]) [[ZLSourceList shared] setText:backup[@"sources"]];
+    if ([backup[@"favourites"] isKindOfClass:[NSArray class]]) [[ZLChannelList shared] setFavouriteKeys:backup[@"favourites"]];
     for (id host in backup[@"trustedHosts"]) {
         if ([host isKindOfClass:[NSString class]]) [[ZLTrust shared] trustHost:host];
     }

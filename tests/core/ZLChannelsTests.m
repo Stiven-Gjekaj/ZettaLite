@@ -65,4 +65,9 @@ ZL_TEST(test_channels_have_groups_and_favourites) {
     ZLChannelList *again = [[ZLChannelList alloc] initWithStore:[[ZLStore alloc] initWithDirectory:store.directory]];
     [again setChannels:channels failures:nil];
     ZL_EQUAL([[again favourites] valueForKey:@"name"], (@[ @"d" ]));
+
+    // A restore keeps only the text values, one time each.
+    [again setFavouriteKeys:@[ @"http://example.org/b", @3, @"http://example.org/b", @"http://example.org/c" ]];
+    ZL_EQUAL([again favouriteKeys], (@[ @"http://example.org/b", @"http://example.org/c" ]));
+    ZL_EQUAL([[again favourites] valueForKey:@"name"], (@[ @"b", @"c" ]));
 }

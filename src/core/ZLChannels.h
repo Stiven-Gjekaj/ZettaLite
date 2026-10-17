@@ -37,5 +37,8 @@ NSArray *ZLFetchChannels(NSURL *url, NSError **error);
 - (void)setChannel:(ZLChannel *)channel favourite:(BOOL)favourite;
 // The favourite channels in the order of the list.
 - (NSArray *)favourites;
+// The URLs of the favourite channels, for the backup.
+- (NSArray *)favouriteKeys;
+- (void)setFavouriteKeys:(NSArray *)keys;
 
 @end

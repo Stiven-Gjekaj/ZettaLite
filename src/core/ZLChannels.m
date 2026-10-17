@@ -157,6 +157,15 @@ static NSString *ZLGroupOf(ZLChannel *channel) {
     [[NSNotificationCenter defaultCenter] postNotificationName:ZLChannelsDidChangeNotification object:self];
 }
 
+- (void)setFavouriteKeys:(NSArray *)keys {
+    NSMutableArray *clean = [NSMutableArray array];
+    for (id key in keys) {
+        if ([key isKindOfClass:[NSString class]] && ![clean containsObject:key]) [clean addObject:key];
+    }
+    [self.store setObject:clean named:@"favourites"];
+    [[NSNotificationCenter defaultCenter] postNotificationName:ZLChannelsDidChangeNotification object:self];
+}
+
 - (NSArray *)favourites {
     NSSet *keys = [NSSet setWithArray:[self favouriteKeys]];
     NSMutableArray *favourites = [NSMutableArray array];
