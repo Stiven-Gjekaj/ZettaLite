@@ -5,6 +5,7 @@
 #import "ZLHomeViewController.h"
 #import "ZLLibraryViewController.h"
 #import "ZLLink.h"
+#import "ZLLog.h"
 #import "ZLLiveViewController.h"
 #import "ZLNavigationController.h"
 #import "ZLPlayback.h"
@@ -64,6 +65,7 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
 
 - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication
          annotation:(id)annotation {
+    ZLLog(@"link %@", url);
     ZLLink *link = ZLParseLink(url);
     if (!link) return NO;
     // A link can come while a player shows. Close it first.
