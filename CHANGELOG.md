@@ -4,6 +4,18 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 1.0.1 (2026-10-17)
+
+Fixes for a long source list.
+
+- Fix: a title page, the streams, the subtitles, and a new addon manifest
+  go before the catalog and search requests that wait. Before, with many
+  addons, a title page waited behind a search for a long time.
+- Fix: the refresh of a manifest on the phone does not hold back the other
+  requests.
+- Fix: a request for an addon tries one more time after a connection or TLS
+  error. Before, one failed read left a title page or the Home banner empty.
+
 ## 1.0.0 (2026-10-17)
 
 The first stable release. It has all the parts of the plan: Stremio addons,
