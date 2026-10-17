@@ -9,6 +9,7 @@
 #import "ZLRemuxSession.h"
 #import "ZLSettings.h"
 #import "ZLSoftwarePlayerViewController.h"
+#import "ZLSubtitleOverlay.h"
 #import "ZLTheme.h"
 #import "ZLTrust.h"
 
@@ -26,8 +27,11 @@
 #pragma mark - System player
 
 // The system movie player. It keeps the remux session for as long as it shows.
-@interface ZLSystemPlayerViewController : MPMoviePlayerViewController
+@interface ZLSystemPlayerViewController : MPMoviePlayerViewController <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) ZLRemuxSession *session;
+@property (nonatomic, strong) ZLSubtitleOverlay *subtitles;
+@property (nonatomic, strong) UIButton *subtitleButton;
+@property (nonatomic, strong) NSTimer *subtitleClock;
 @property (nonatomic, copy) void (^onError)(void);
 @property (nonatomic, copy) void (^onClose)(double position, double duration, BOOL ended);
 @property (nonatomic) BOOL ended;
@@ -52,8 +56,75 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+- (void)addSubtitles {
+    UIView *view = self.moviePlayer.view;
+    self.subtitles.view.frame = view.bounds;
+    self.subtitles.bottomInset = 24;
+    [view addSubview:self.subtitles.view];
+    // The controls of the system player have no place for a button. This
+    // button shows with them after a tap, and hides after some seconds.
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+    [button setTitle:@"Subs" forState:UIControlStateNormal];
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [button setTitleColor:ZLAccentColor() forState:UIControlStateHighlighted];
+    button.titleLabel.font = ZLBoldFont(15);
+    button.layer.cornerRadius = 5;
+    button.layer.borderWidth = 1;
+    button.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.35].CGColor;
+    button.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.9];
+    button.frame = CGRectMake(view.bounds.size.width - 72, 74, 64, 32);
+    button.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [button addTarget:self action:@selector(chooseSubtitles) forControlEvents:UIControlEventTouchUpInside];
+    button.alpha = 0;
+    [view addSubview:button];
+    self.subtitleButton = button;
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showSubtitleButton)];
+    tap.cancelsTouchesInView = NO;
+    tap.delegate = self;
+    [view addGestureRecognizer:tap];
+    [self showSubtitleButton];
+    self.subtitleClock = [NSTimer scheduledTimerWithTimeInterval:0.2 target:self selector:@selector(showCue) userInfo:nil repeats:YES];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
+    return touch.view != self.subtitleButton;
+}
+
+- (void)showSubtitleButton {
+    BOOL shown = self.subtitleButton.alpha > 0.5;
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideSubtitleButton) object:nil];
+    // A tap on the video hides the controls of the system player when they show.
+    [self setSubtitleButtonShown:!shown];
+    if (!shown) [self performSelector:@selector(hideSubtitleButton) withObject:nil afterDelay:5];
+}
+
+- (void)hideSubtitleButton {
+    [self setSubtitleButtonShown:NO];
+}
+
+- (void)setSubtitleButtonShown:(BOOL)shown {
+    [UIView animateWithDuration:0.25 animations:^{ self.subtitleButton.alpha = shown ? 1 : 0; }];
+    // The subtitles move up over the controls of the system player.
+    self.subtitles.bottomInset = shown ? 110 : 24;
+}
+
+- (void)chooseSubtitles {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideSubtitleButton) object:nil];
+    [self performSelector:@selector(hideSubtitleButton) withObject:nil afterDelay:5];
+    [self.subtitles showPickerInView:self.view];
+}
+
+- (void)showCue {
+    [self.subtitles showAt:self.moviePlayer.currentPlaybackTime];
+}
+
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if (self.subtitles && !self.subtitleClock) [self addSubtitles];
     // The player gives no position after it stops, so keep it each second.
     if (!self.clock) {
         self.clock = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(keepPosition) userInfo:nil repeats:YES];
@@ -94,6 +165,9 @@
     }
     [self.clock invalidate];
     self.clock = nil;
+    [self.subtitleClock invalidate];
+    self.subtitleClock = nil;
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
     if (!self.failed && self.onClose) {
         double position = self.lastPosition;
         double duration = self.lastDuration;
@@ -213,7 +287,7 @@ static ZLPlayback *ZLCurrentPlayback;
                                                    : @"Loading";
     self.loading.detail.text = item.sourceName ?: item.title;
     if ([self playsNatively]) {
-        [self showSystemPlayer:item.URL session:nil];
+        [self showSystemPlayer:item.URL session:nil info:nil];
         return;
     }
     ZLLog(@"play %@", item.URL);
@@ -247,7 +321,7 @@ static ZLPlayback *ZLCurrentPlayback;
                 [self failWith:error];
             } else {
                 NSURL *url = [[ZLHLSServer shared] addSource:session];
-                [self showSystemPlayer:url session:session];
+                [self showSystemPlayer:url session:session info:info];
             }
         });
     });
@@ -261,12 +335,13 @@ static ZLPlayback *ZLCurrentPlayback;
     return ![[ZLTrust shared] isTrusted:self.item.URL.host];
 }
 
-- (void)showSystemPlayer:(NSURL *)url session:(ZLRemuxSession *)session {
+- (void)showSystemPlayer:(NSURL *)url session:(ZLRemuxSession *)session info:(ZLMediaInfo *)info {
     [self.loading removeFromSuperview];
     self.loading = nil;
     ZLPlayItem *item = self.item;
     ZLSystemPlayerViewController *player = [[ZLSystemPlayerViewController alloc] initWithContentURL:url];
     player.session = session;
+    player.subtitles = [[ZLSubtitleOverlay alloc] initWithItem:item info:info embedded:session.subtitles];
     player.onClose = item.onClose;
     player.moviePlayer.movieSourceType = MPMovieSourceTypeStreaming;
     if (item.startTime > 0) player.moviePlayer.initialPlaybackTime = item.startTime;
@@ -299,6 +374,7 @@ static ZLPlayback *ZLCurrentPlayback;
     self.loading = nil;
     ZLSoftwarePlayerViewController *player = [[ZLSoftwarePlayerViewController alloc] initWithEngine:engine];
     player.titleText = self.item.title;
+    player.subtitles = [[ZLSubtitleOverlay alloc] initWithItem:self.item info:info embedded:engine.subtitles];
     void (^onClose)(double, double, BOOL) = self.item.onClose;
     player.onClose = ^(double position, double duration) {
         if (onClose) onClose(position, duration, duration > 0 && position >= duration - 2);
