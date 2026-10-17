@@ -1,5 +1,7 @@
 #import "ZLTest.h"
 #import "ZLAddonManager.h"
+#import "ZLSources.h"
+#import "ZLStore.h"
 #import "ZLTestServer.h"
 
 static NSData *JSON(id object) {
@@ -58,3 +60,4 @@ ZL_TEST(test_fetch_puts_a_high_request_before_the_normal_ones_that_wait) {
     ZL_EXPECT(high != NSNotFound && high < 8);
     [server stop];
 }
+

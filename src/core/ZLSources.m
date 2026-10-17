@@ -37,17 +37,26 @@ NSArray *ZLParseSources(NSString *text) {
     return sources;
 }
 
+@interface ZLSourceList ()
+@property (nonatomic, strong) ZLStore *store;
+@end
+
 @implementation ZLSourceList
 
 + (instancetype)shared {
     static ZLSourceList *shared;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ shared = [ZLSourceList new]; });
+    dispatch_once(&once, ^{ shared = [[ZLSourceList alloc] initWithStore:[ZLStore shared]]; });
     return shared;
 }
 
+- (instancetype)initWithStore:(ZLStore *)store {
+    if ((self = [super init])) _store = store;
+    return self;
+}
+
 - (NSString *)text {
-    NSArray *lines = [[ZLStore shared] objectNamed:@"sources"];
+    NSArray *lines = [self.store objectNamed:@"sources"];
     return [lines isKindOfClass:[NSArray class]] ? [lines componentsJoinedByString:@"\n"] : @"";
 }
 
@@ -67,7 +76,7 @@ NSArray *ZLParseSources(NSString *text) {
     NSArray *sources = ZLParseSources(text);
     NSMutableArray *lines = [NSMutableArray array];
     for (ZLSource *source in sources) [lines addObject:source.URL.absoluteString];
-    [[ZLStore shared] setObject:lines named:@"sources"];
+    [self.store setObject:lines named:@"sources"];
     [[NSNotificationCenter defaultCenter] postNotificationName:ZLSourcesDidChangeNotification object:self];
     return sources.count;
 }

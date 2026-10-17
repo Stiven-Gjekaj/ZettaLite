@@ -8,6 +8,8 @@
 
 extern NSString *const ZLAddonsDidChangeNotification;
 
+@class ZLSourceList, ZLStore;
+
 typedef NS_ENUM(NSInteger, ZLFetchPriority) {
     // Catalogs and search. A search asks many catalogs at the same time.
     ZLFetchNormal,
@@ -23,6 +25,8 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
 @interface ZLAddonManager : NSObject
 
 + (instancetype)shared;
+// Tests give their own store and source list.
+- (instancetype)initWithStore:(ZLStore *)store sources:(ZLSourceList *)sources;
 
 // The addons, in the order of the source list. An addon that did not load
 // yet is not in the list.

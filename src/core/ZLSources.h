@@ -22,8 +22,12 @@ extern NSString *const ZLSourcesDidChangeNotification;
 // lines that are not links, and lines that come again.
 NSArray *ZLParseSources(NSString *text);
 
+@class ZLStore;
+
 @interface ZLSourceList : NSObject
 + (instancetype)shared;
+// Tests give their own store.
+- (instancetype)initWithStore:(ZLStore *)store;
 - (NSArray *)sources;
 - (NSArray *)sourcesOfKind:(ZLSourceKind)kind;
 // The list as text, one URL on each line.

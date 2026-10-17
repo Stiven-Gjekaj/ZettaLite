@@ -41,6 +41,8 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
 }
 
 @interface ZLAddonManager ()
+@property (nonatomic, strong) ZLStore *store;
+@property (nonatomic, strong) ZLSourceList *sources;
 @property (nonatomic, strong) NSArray *addons;
 @property (nonatomic, strong) NSDictionary *failures;
 @property (nonatomic, strong) NSMutableDictionary *catalogCache;
@@ -55,28 +57,36 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
 + (instancetype)shared {
     static ZLAddonManager *shared;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ shared = [ZLAddonManager new]; });
+    dispatch_once(&once, ^{
+        shared = [[ZLAddonManager alloc] initWithStore:[ZLStore shared] sources:[ZLSourceList shared]];
+    });
     return shared;
 }
 
-- (instancetype)init {
+- (instancetype)initWithStore:(ZLStore *)store sources:(ZLSourceList *)sources {
     if ((self = [super init])) {
+        _store = store;
+        _sources = sources;
         _addons = @[];
         _failures = @{};
         _catalogCache = [NSMutableDictionary dictionary];
         _waiting = [NSMutableArray array];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload)
-                                                     name:ZLSourcesDidChangeNotification object:nil];
+                                                     name:ZLSourcesDidChangeNotification object:sources];
     }
     return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - Manifests
 
 - (void)reload {
     NSUInteger generation = ++self.generation;
-    NSArray *sources = [[ZLSourceList shared] sourcesOfKind:ZLSourceAddon];
-    NSDictionary *saved = [[ZLStore shared] objectNamed:@"manifests"] ?: @{};
+    NSArray *sources = [self.sources sourcesOfKind:ZLSourceAddon];
+    NSDictionary *saved = [self.store objectNamed:@"manifests"] ?: @{};
     NSMutableDictionary *manifests = [NSMutableDictionary dictionary];
     for (ZLSource *source in sources) {
         NSDictionary *manifest = saved[source.URL.absoluteString];
@@ -106,7 +116,7 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
                 failures[key] = error.localizedDescription ?: @"The link does not give an addon manifest.";
             }
             if (--left == 0) {
-                [[ZLStore shared] setObject:manifests named:@"manifests"];
+                [self.store setObject:manifests named:@"manifests"];
                 [self buildFrom:manifests sources:sources failures:failures];
                 [self finishLoading];
             }
