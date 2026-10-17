@@ -1,5 +1,6 @@
 #define MBEDTLS_USER_CONFIG_FILE "zl_mbedtls_config.h"
 #import "ZLConnection.h"
+#import "ZLLog.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -42,6 +43,17 @@ static BOOL ZLSetUpTLS(void) {
         ZLTLSReady = YES;
     });
     return ZLTLSReady;
+}
+
+// The last TLS session of each host. A new connection to the host resumes
+// it, and so skips the costly part of the handshake: the A5 chip needs about
+// half a second for a full handshake.
+static NSMutableDictionary *ZLSessions;  // "host:port" -> NSValue with a mbedtls_ssl_session pointer
+
+static NSMutableDictionary *ZLSessionTable(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ ZLSessions = [NSMutableDictionary dictionary]; });
+    return ZLSessions;
 }
 
 static NSError *ZLTLSError(int code, NSString *text) {
@@ -138,14 +150,14 @@ static int ZLConnectSocket(NSString *host, int port, NSTimeInterval timeout, NSE
     ZLConnection *connection = [ZLConnection new];
     connection.socket = fd;
     connection.tls = tls;
-    if (tls && ![connection handshakeWith:host trust:trust error:error]) {
+    if (tls && ![connection handshakeWith:host port:port trust:trust error:error]) {
         [connection close];
         return nil;
     }
     return connection;
 }
 
-- (BOOL)handshakeWith:(NSString *)host trust:(ZLTrust *)trust error:(NSError **)error {
+- (BOOL)handshakeWith:(NSString *)host port:(int)port trust:(ZLTrust *)trust error:(NSError **)error {
     mbedtls_ssl_init(&_ssl);
     mbedtls_ssl_config_init(&_config);
     mbedtls_ssl_config_defaults(&_config, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
@@ -158,14 +170,32 @@ static int ZLConnectSocket(NSString *host, int port, NSTimeInterval timeout, NSE
     int result = mbedtls_ssl_setup(&_ssl, &_config);
     if (result == 0) result = mbedtls_ssl_set_hostname(&_ssl, host.UTF8String);
     mbedtls_ssl_set_bio(&_ssl, &_socket, ZLSend, ZLReceive, NULL);
+    NSString *key = [NSString stringWithFormat:@"%@:%d", host, port];
+    NSMutableDictionary *sessions = ZLSessionTable();
+    @synchronized (sessions) {
+        mbedtls_ssl_session *saved = [sessions[key] pointerValue];
+        // mbedtls_ssl_set_session copies the session.
+        if (result == 0 && saved) mbedtls_ssl_set_session(&_ssl, saved);
+    }
+    NSDate *start = [NSDate date];
     while (result == 0 || result == MBEDTLS_ERR_SSL_WANT_READ || result == MBEDTLS_ERR_SSL_WANT_WRITE) {
         result = mbedtls_ssl_handshake(&_ssl);
         if (result == 0) break;
     }
     if (result != 0) {
+        // A bad saved session must not stop the next connection.
+        @synchronized (sessions) {
+            mbedtls_ssl_session *saved = [sessions[key] pointerValue];
+            if (saved) {
+                mbedtls_ssl_session_free(saved);
+                free(saved);
+                [sessions removeObjectForKey:key];
+            }
+        }
         if (error) *error = ZLTLSError(result, [NSString stringWithFormat:@"The secure connection to %@ failed.", host]);
         return NO;
     }
+    ZLLog(@"tls %@ %.2f s", host, -[start timeIntervalSinceNow]);
     uint32_t flags = mbedtls_ssl_get_verify_result(&_ssl);
     if (flags != 0 && ![trust isTrusted:host]) {
         char reason[256] = {0};
@@ -177,6 +207,21 @@ static int ZLConnectSocket(NSString *host, int port, NSTimeInterval timeout, NSE
                                      userInfo:@{ NSLocalizedDescriptionKey: text, ZLUntrustedHostKey: host }];
         }
         return NO;
+    }
+    mbedtls_ssl_session *session = malloc(sizeof(mbedtls_ssl_session));
+    mbedtls_ssl_session_init(session);
+    if (mbedtls_ssl_get_session(&_ssl, session) == 0) {
+        @synchronized (sessions) {
+            mbedtls_ssl_session *old = [sessions[key] pointerValue];
+            if (old) {
+                mbedtls_ssl_session_free(old);
+                free(old);
+            }
+            sessions[key] = [NSValue valueWithPointer:session];
+        }
+    } else {
+        mbedtls_ssl_session_free(session);
+        free(session);
     }
     return YES;
 }
