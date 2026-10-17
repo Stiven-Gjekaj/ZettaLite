@@ -45,7 +45,8 @@ segment read after its end. So normal playback reads the file one time from
 start to end, with no seek. A seek in the player reads the segment at the
 new time.
 
-An input that cannot seek, for example a live channel, becomes a live
+A live channel in HLS goes to the system player as it is. A live channel in
+MPEG-TS goes through the remux. An input that cannot seek, for example a live channel, becomes a live
 playlist. One thread cuts the input into segments as they come. The
 playlist holds the newest 8 segments.
 
@@ -89,6 +90,8 @@ src/core/      code with no FFmpeg and no UIKit. The tests run it on the Mac and
   ZLHLSServer    the HTTP server on 127.0.0.1
   ZLH264         reads the H.264 SPS
   ZLLink         reads zettalite:// links
+  ZLM3U          reads M3U playlists of channels
+  ZLChannels     the channels of Live TV, with groups and favourites
   ZLLog          the log file for the diagnostics
   ZLDecodeLimits the measured speed of the software decoders
 src/media/     the code with FFmpeg. The tests run it on the phone.

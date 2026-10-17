@@ -45,10 +45,15 @@ list, and press Save. Put one link on each line:
 | ---- | ------- | ----- |
 | A Stremio addon | `https://.../manifest.json` | Catalogs, titles, streams, subtitles |
 | An IPTV playlist | `https://.../playlist.m3u` | Live channels |
-| A media link | `https://.../film.mkv` | One video |
+| A media link | `https://.../film.mkv` | One video, in the Links group of Live TV |
 
 The new list replaces the old list. The order of the lines sets the order of
 the rows on Home.
+
+Live TV reads the `#EXTINF` attributes `tvg-logo`, `tvg-id`, and
+`group-title`, and the headers of `#EXTVLCOPT`, `#EXTHTTP`, and of a link
+with `|`. A `.m3u8` link that is one HLS stream shows as one channel. The
+star marks a favourite channel. The favourites show first.
 
 ZettaLite plays HTTP streams only. A torrent addon gives HTTP links when you
 add a debrid key in its settings.
@@ -65,6 +70,8 @@ percent-encoded.
 | `zettalite://watch?type=TYPE&id=ID` | Plays the best stream of a title, or of an episode with `id=tt0944947:1:2` |
 | `zettalite://search?q=TEXT` | Searches in all addons |
 | `zettalite://tab?name=NAME` | Opens `home`, `search`, `library`, `live`, or `settings` |
+| `zettalite://live?group=NAME` | Opens a group of channels in Live TV |
+| `zettalite://live?channel=NAME` | Plays the first channel with this name |
 
 Settings, Play a link plays one pasted link.
 
