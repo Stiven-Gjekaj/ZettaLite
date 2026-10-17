@@ -80,6 +80,23 @@ URL -> FFmpeg demuxer -> packet queues -> video decoder (2 threads) -> frame que
 start and 2 frames after its end, and then drops them. So the frames of two
 segments meet with no gap and no overlap.
 
+## Subtitles
+
+```
+addon subtitles -> ZLHTTPStream -> ZLParseSubtitles -> ZLCueList -> ZLSubtitleOverlay
+file packets    -> ZLEmbeddedSubtitles              -> ZLCueList -> ZLSubtitleOverlay
+```
+
+- `ZLParseSubtitles` reads SRT and WebVTT files from the subtitle addons and
+  from the `subtitles` of a stream.
+- `ZLEmbeddedSubtitles` reads the text subtitle streams of a file: SubRip,
+  WebVTT, mov_text, and ASS. Both players read the packets of all these
+  streams, because they are small. So a change of the track shows the cues
+  that the players already read. Bitmap subtitles are not read.
+- `ZLSubtitleOverlay` shows the cue of the current second over the player,
+  and gives the picker. It picks the language of Settings at the start: the
+  file first, then the addons.
+
 ## Files
 
 ```
@@ -92,6 +109,7 @@ src/core/      code with no FFmpeg and no UIKit. The tests run it on the Mac and
   ZLLink         reads zettalite:// links
   ZLM3U          reads M3U playlists of channels
   ZLChannels     the channels of Live TV, with groups and favourites
+  ZLSubtitles    reads SRT and WebVTT, and finds the cue of a second
   ZLLog          the log file for the diagnostics
   ZLDecodeLimits the measured speed of the software decoders
 src/media/     the code with FFmpeg. The tests run it on the phone.
@@ -100,6 +118,7 @@ src/media/     the code with FFmpeg. The tests run it on the phone.
   ZLAudioEncoder   changes audio into AAC
   ZLRemuxSession   makes the HLS segments
   ZLPlayerEngine   the engine of the own player
+  ZLEmbeddedSubtitles  reads the text subtitles inside a file
 src/ui/        the screens
 src/ffmpeg/    a compiler builtin for FFmpeg that iOS 6 does not have
 src/tls/       the configuration of mbedTLS for iOS 6

@@ -58,6 +58,13 @@ star marks a favourite channel. The favourites show first.
 ZettaLite plays HTTP streams only. A torrent addon gives HTTP links when you
 add a debrid key in its settings.
 
+## Subtitles
+
+The player shows SRT and WebVTT subtitles from subtitle addons, for example
+OpenSubtitles v3, and the text subtitles inside MKV and MP4 files. Choose
+the language and the size in Settings, Playback. Subs in the player shows
+the choices. Bitmap subtitles, for example PGS, do not show.
+
 ## Links from other apps
 
 Other apps and Safari bookmarklets can open these links. Each value is
