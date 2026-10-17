@@ -59,7 +59,7 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 - Play HLS channels in the system player. Play raw MPEG-TS channels through
   the local server.
 
-## 0.7: subtitles
+## 0.7: subtitles (done, 2026-10-17)
 
 - Read SRT and VTT from subtitle addons and the text subtitles of MKV files.
 - Show them over both players, with a picker and a size setting.
