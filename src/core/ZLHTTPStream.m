@@ -537,7 +537,14 @@ static BOOL ZLTakeBody(NSMutableData *raw, NSMutableData *body, BOOL chunked, in
     [self.condition unlock];
 }
 
-+ (NSData *)fetch:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
+// YES for an error that can go away on a second try, for example a TLS read
+// that fails while the Wi-Fi of the phone wakes up.
+static BOOL ZLCanRetry(NSError *error) {
+    if (![error.domain isEqualToString:ZLErrorDomain]) return error != nil;
+    return error.code != ZLErrorUntrustedHost && error.code != ZLErrorHTTPStatus && error.code != ZLErrorCancelled;
+}
+
++ (NSData *)fetchOnce:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
     ZLHTTPStream *stream = [[ZLHTTPStream alloc] initWithURL:url headers:headers];
     if (![stream open:error]) return nil;
     NSMutableData *data = [NSMutableData data];
@@ -553,6 +560,18 @@ static BOOL ZLTakeBody(NSMutableData *raw, NSMutableData *body, BOOL chunked, in
     }
     [stream close];
     if (finalURL) *finalURL = stream.finalURL;
+    return data;
+}
+
++ (NSData *)fetch:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
+    NSError *failure = nil;
+    NSData *data = [self fetchOnce:url headers:headers finalURL:finalURL error:&failure];
+    if (!data && ZLCanRetry(failure)) {
+        [NSThread sleepForTimeInterval:0.5];
+        failure = nil;
+        data = [self fetchOnce:url headers:headers finalURL:finalURL error:&failure];
+    }
+    if (!data && error) *error = failure;
     return data;
 }
 

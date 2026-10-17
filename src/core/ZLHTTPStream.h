@@ -39,6 +39,8 @@
 - (void)close;
 
 // Reads the full resource. It is for small files, for example a playlist.
+// After a connection or TLS error it tries one more time. After an HTTP
+// status error it does not.
 + (NSData *)fetch:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error;
 
 @end

@@ -15,6 +15,11 @@
 @property (nonatomic) BOOL sendsLength;
 // When YES, a full body comes with chunked transfer encoding.
 @property (nonatomic) BOOL chunked;
+// The number of the next requests that get no answer: the server closes the
+// connection after it reads the request.
+@property (atomic) NSUInteger dropsRequests;
+// Seconds that the server waits before each answer.
+@property (atomic) NSTimeInterval delay;
 // Bytes per write. A small value makes a slow server.
 @property (nonatomic) NSUInteger chunkSize;
 

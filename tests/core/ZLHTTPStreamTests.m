@@ -144,3 +144,31 @@ ZL_TEST(test_stream_asks_for_a_range_from_the_start) {
     [stream close];
     [server stop];
 }
+
+ZL_TEST(test_fetch_tries_again_after_a_dropped_connection) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSData *body = [@"{\"id\":\"x\"}" dataUsingEncoding:NSUTF8StringEncoding];
+    NSURL *url = [server serve:body at:@"/manifest.json" type:@"application/json"];
+    server.dropsRequests = 1;
+    NSError *error = nil;
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:&error], body);
+    ZL_EQUAL_INT(server.requestCount, 2);
+    // Two drops in a row fail: the fetch tries one more time only.
+    server.dropsRequests = 2;
+    ZL_EXPECT([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:&error] == nil);
+    ZL_EXPECT(error != nil);
+    ZL_EQUAL_INT(server.requestCount, 4);
+    [server stop];
+}
+
+ZL_TEST(test_fetch_does_not_try_again_after_an_http_error) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://127.0.0.1:%u/none.json", server.port]];
+    NSError *error = nil;
+    ZL_EXPECT([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:&error] == nil);
+    ZL_EQUAL_INT(error.code, ZLErrorHTTPStatus);
+    ZL_EQUAL_INT(server.requestCount, 1);
+    [server stop];
+}

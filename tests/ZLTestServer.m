@@ -125,6 +125,18 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
             self.requestCount++;
             route = self.routes[path];
         }
+        BOOL drop = NO;
+        @synchronized (self.routes) {
+            if (self.dropsRequests > 0) {
+                self.dropsRequests--;
+                drop = YES;
+            }
+        }
+        if (drop) {
+            close(fd);
+            return;
+        }
+        if (self.delay > 0) [NSThread sleepForTimeInterval:self.delay];
         NSString *head;
         NSData *body = nil;
         NSUInteger start = 0, end = 0;
