@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <zlib.h>
 
 NSData *ZLTestPattern(NSUInteger length) {
     NSMutableData *data = [NSMutableData dataWithLength:length];
@@ -17,6 +18,9 @@ NSData *ZLTestPattern(NSUInteger length) {
 @property (nonatomic, strong) NSMutableDictionary *routes;
 @property (nonatomic, strong) NSDictionary *lastHeaders;
 @property (nonatomic) NSUInteger requestCount;
+@property (atomic) NSUInteger connectionCount;
+// The connections that wait for a next request.
+@property (nonatomic, strong) NSMutableSet *idle;
 @end
 
 @implementation ZLTestServer
@@ -28,6 +32,7 @@ NSData *ZLTestPattern(NSUInteger length) {
         _acceptsRanges = YES;
         _sendsLength = YES;
         _chunkSize = 65536;
+        _idle = [NSMutableSet set];
     }
     return self;
 }
@@ -83,6 +88,7 @@ NSData *ZLTestPattern(NSUInteger length) {
         if (client < 0) break;
         int on = 1;
         setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+        self.connectionCount++;
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [self serve:client]; });
     }
 }
@@ -97,17 +103,62 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
     return YES;
 }
 
+- (void)closeIdleConnections {
+    @synchronized (self.idle) {
+        for (NSNumber *fd in self.idle) shutdown(fd.intValue, SHUT_RDWR);
+        [self.idle removeAllObjects];
+    }
+}
+
+static NSData *Gzip(NSData *data) {
+    z_stream zip;
+    memset(&zip, 0, sizeof(zip));
+    deflateInit2(&zip, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY);
+    NSMutableData *out = [NSMutableData dataWithLength:deflateBound(&zip, (uLong)data.length) + 32];
+    zip.next_in = (Bytef *)data.bytes;
+    zip.avail_in = (uInt)data.length;
+    zip.next_out = out.mutableBytes;
+    zip.avail_out = (uInt)out.length;
+    deflate(&zip, Z_FINISH);
+    out.length = zip.total_out;
+    deflateEnd(&zip);
+    return out;
+}
+
+// Reads one request head. Returns nil when the client closes.
+static NSString *ReadRequest(int fd) {
+    NSMutableData *request = [NSMutableData data];
+    uint8_t byte;
+    // One byte at a time, so that no byte of a next request is lost.
+    while (request.length < 16384) {
+        ssize_t n = read(fd, &byte, 1);
+        if (n <= 0) return nil;
+        [request appendBytes:&byte length:1];
+        if (request.length >= 4 && memcmp((const uint8_t *)request.bytes + request.length - 4, "\r\n\r\n", 4) == 0) break;
+    }
+    return [[NSString alloc] initWithData:request encoding:NSISOLatin1StringEncoding];
+}
+
 - (void)serve:(int)fd {
+    while ([self answerOne:fd]) {
+    }
+    @synchronized (self.idle) {
+        [self.idle removeObject:@(fd)];
+    }
+    close(fd);
+}
+
+// Answers one request. Returns YES when the connection stays open.
+- (BOOL)answerOne:(int)fd {
     @autoreleasepool {
-        NSMutableData *request = [NSMutableData data];
-        uint8_t buffer[4096];
-        while (request.length < 16384) {
-            ssize_t n = read(fd, buffer, sizeof(buffer));
-            if (n <= 0) break;
-            [request appendBytes:buffer length:(size_t)n];
-            if (strnstr(request.bytes, "\r\n\r\n", request.length)) break;
+        @synchronized (self.idle) {
+            [self.idle addObject:@(fd)];
         }
-        NSString *text = [[NSString alloc] initWithData:request encoding:NSISOLatin1StringEncoding];
+        NSString *text = ReadRequest(fd);
+        @synchronized (self.idle) {
+            [self.idle removeObject:@(fd)];
+        }
+        if (!text) return NO;
         NSArray *lines = [text componentsSeparatedByString:@"\r\n"];
         NSArray *words = [lines.firstObject componentsSeparatedByString:@" "];
         NSString *path = words.count > 1 ? words[1] : @"";
@@ -132,11 +183,12 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
                 drop = YES;
             }
         }
-        if (drop) {
-            close(fd);
-            return;
-        }
+        if (drop) return NO;
         if (self.delay > 0) [NSThread sleepForTimeInterval:self.delay];
+        NSString *connectionHeader = [headers[@"connection"] lowercaseString];
+        BOOL keep = self.keepsAlive && [connectionHeader isEqualToString:@"keep-alive"];
+        NSString *encoding = [headers[@"accept-encoding"] lowercaseString];
+        BOOL gzip = self.gzips && encoding && [encoding rangeOfString:@"gzip"].location != NSNotFound;
         NSString *head;
         NSData *body = nil;
         NSUInteger start = 0, end = 0;
@@ -150,6 +202,8 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
             NSString *range = headers[@"range"];
             if (!self.sendsLength) {
                 head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\n", route[@"type"]];
+                // A body with no length ends when the connection closes.
+                keep = NO;
             } else if (self.acceptsRanges && [range hasPrefix:@"bytes="]) {
                 NSArray *parts = [[range substringFromIndex:6] componentsSeparatedByString:@"-"];
                 start = (NSUInteger)[parts[0] longLongValue];
@@ -158,32 +212,39 @@ static BOOL WriteAll(int fd, const uint8_t *bytes, size_t length, size_t chunk) 
                                                   @"Content-Range: bytes %lu-%lu/%lu\r\nContent-Length: %lu\r\n",
                                                   route[@"type"], (unsigned long)start, (unsigned long)end - 1,
                                                   (unsigned long)body.length, (unsigned long)(end - start)];
-            } else if (self.chunked) {
-                head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\nTransfer-Encoding: chunked\r\n",
-                                                  route[@"type"]];
-                // Chunks of 1000 bytes, then the last chunk of size 0.
-                NSMutableData *chunks = [NSMutableData data];
-                for (NSUInteger at = 0; at < body.length; at += 1000) {
-                    NSUInteger size = MIN(1000u, body.length - at);
-                    [chunks appendData:[[NSString stringWithFormat:@"%lx\r\n", (unsigned long)size] dataUsingEncoding:NSASCIIStringEncoding]];
-                    [chunks appendData:[body subdataWithRange:NSMakeRange(at, size)]];
-                    [chunks appendBytes:"\r\n" length:2];
-                }
-                [chunks appendBytes:"0\r\n\r\n" length:5];
-                body = chunks;
-                end = body.length;
             } else {
-                head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\n%@Content-Length: %lu\r\n",
-                                                  route[@"type"], self.acceptsRanges ? @"Accept-Ranges: bytes\r\n" : @"",
-                                                  (unsigned long)body.length];
+                NSString *extra = @"";
+                if (gzip) {
+                    body = Gzip(body);
+                    end = body.length;
+                    extra = @"Content-Encoding: gzip\r\n";
+                }
+                if (self.chunked) {
+                    head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\n%@Transfer-Encoding: chunked\r\n",
+                                                      route[@"type"], extra];
+                    // Chunks of 1000 bytes, then the last chunk of size 0.
+                    NSMutableData *chunks = [NSMutableData data];
+                    for (NSUInteger at = 0; at < body.length; at += 1000) {
+                        NSUInteger size = MIN(1000u, body.length - at);
+                        [chunks appendData:[[NSString stringWithFormat:@"%lx\r\n", (unsigned long)size] dataUsingEncoding:NSASCIIStringEncoding]];
+                        [chunks appendData:[body subdataWithRange:NSMakeRange(at, size)]];
+                        [chunks appendBytes:"\r\n" length:2];
+                    }
+                    [chunks appendBytes:"0\r\n\r\n" length:5];
+                    body = chunks;
+                    end = body.length;
+                } else {
+                    head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: %@\r\n%@%@Content-Length: %lu\r\n",
+                                                      route[@"type"], extra, self.acceptsRanges ? @"Accept-Ranges: bytes\r\n" : @"",
+                                                      (unsigned long)body.length];
+                }
             }
         }
-        head = [head stringByAppendingString:@"Connection: close\r\n\r\n"];
+        head = [head stringByAppendingString:keep ? @"Connection: keep-alive\r\n\r\n" : @"Connection: close\r\n\r\n"];
         NSData *headData = [head dataUsingEncoding:NSASCIIStringEncoding];
-        if (WriteAll(fd, headData.bytes, headData.length, headData.length) && body) {
-            WriteAll(fd, (const uint8_t *)body.bytes + start, end - start, self.chunkSize);
-        }
-        close(fd);
+        BOOL written = WriteAll(fd, headData.bytes, headData.length, headData.length);
+        if (written && body) written = WriteAll(fd, (const uint8_t *)body.bytes + start, end - start, self.chunkSize);
+        return written && keep;
     }
 }
 

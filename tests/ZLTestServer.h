@@ -20,6 +20,14 @@
 @property (atomic) NSUInteger dropsRequests;
 // Seconds that the server waits before each answer.
 @property (atomic) NSTimeInterval delay;
+// When YES, the server keeps a connection open for the next request, when
+// the request asks for it.
+@property (atomic) BOOL keepsAlive;
+// When YES, the server compresses a full body with gzip, when the request
+// accepts it.
+@property (atomic) BOOL gzips;
+// The number of connections that the server accepted.
+@property (atomic, readonly) NSUInteger connectionCount;
 // Bytes per write. A small value makes a slow server.
 @property (nonatomic) NSUInteger chunkSize;
 
@@ -28,6 +36,9 @@
 // path is for example "/a.mkv". Returns the full URL.
 - (NSURL *)serve:(NSData *)body at:(NSString *)path type:(NSString *)type;
 - (NSURL *)redirect:(NSString *)path to:(NSString *)target;
+// Closes the connections that wait for a next request, as a server does
+// after its keep-alive time.
+- (void)closeIdleConnections;
 
 @end
 
