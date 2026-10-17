@@ -604,7 +604,8 @@ static NSData *ZLFetchRequest(NSURL *url, NSDictionary *headers) {
     fields[@"Host"] = host;
     fields[@"User-Agent"] = ZLUserAgent;
     fields[@"Accept"] = @"*/*";
-    fields[@"Accept-Encoding"] = @"identity";
+    // JSON and playlists are text, and gzip makes them several times smaller.
+    fields[@"Accept-Encoding"] = @"gzip";
     fields[@"Connection"] = @"keep-alive";
     [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *value, BOOL *stop) {
         for (NSString *name in fields.allKeys) {

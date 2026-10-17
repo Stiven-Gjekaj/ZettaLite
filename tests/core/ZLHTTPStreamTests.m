@@ -208,3 +208,18 @@ ZL_TEST(test_fetch_connects_again_when_the_server_closed_the_idle_connection) {
     [server stop];
 }
 
+ZL_TEST(test_fetch_asks_for_gzip_and_inflates_it) {
+    ZLTestServer *server = [ZLTestServer new];
+    server.gzips = YES;
+    ZL_EXPECT([server start]);
+    NSMutableString *text = [NSMutableString string];
+    for (int i = 0; i < 2000; i++) [text appendFormat:@"{\"id\":\"tt%07d\",\"name\":\"Title %d\"},", i, i];
+    NSData *body = [text dataUsingEncoding:NSUTF8StringEncoding];
+    NSURL *url = [server serve:body at:@"/catalog.json" type:@"application/json"];
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    ZL_EQUAL(server.lastHeaders[@"accept-encoding"], @"gzip");
+    server.chunked = YES;
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    [server stop];
+}
+
