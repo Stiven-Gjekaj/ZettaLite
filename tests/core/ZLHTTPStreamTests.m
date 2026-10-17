@@ -223,3 +223,22 @@ ZL_TEST(test_fetch_asks_for_gzip_and_inflates_it) {
     [server stop];
 }
 
+ZL_TEST(test_fetch_skips_a_host_that_failed_two_times) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSData *body = ZLTestPattern(100);
+    NSURL *url = [server serve:body at:@"/a.json" type:@"application/json"];
+    // Each failed fetch makes two requests: the first try and the retry.
+    server.dropsRequests = 4;
+    ZL_EXPECT([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL] == nil);
+    ZL_EXPECT([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL] == nil);
+    ZL_EQUAL_INT(server.requestCount, 4);
+    // The server works again, but the host is skipped for now.
+    NSError *error = nil;
+    ZL_EXPECT([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:&error] == nil);
+    ZL_EXPECT(error != nil);
+    ZL_EQUAL_INT(server.requestCount, 4);
+    [ZLHTTPStream forgetFailedHosts];
+    ZL_EQUAL([ZLHTTPStream fetch:url headers:nil finalURL:NULL error:NULL], body);
+    [server stop];
+}

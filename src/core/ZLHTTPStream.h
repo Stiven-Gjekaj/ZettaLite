@@ -40,7 +40,11 @@
 
 // Reads the full resource. It is for small files, for example a playlist.
 // After a connection or TLS error it tries one more time. After an HTTP
-// status error it does not.
+// status error it does not. A host that fails two fetches in a row fails at
+// once for the next 2 minutes.
 + (NSData *)fetch:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error;
+
+// Tests start with no failed hosts.
++ (void)forgetFailedHosts;
 
 @end

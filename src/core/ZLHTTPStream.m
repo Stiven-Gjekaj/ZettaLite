@@ -741,13 +741,51 @@ static NSData *ZLReadBody(ZLConnection *connection, ZLResponseHead *head, NSData
     return nil;
 }
 
+// A host that failed this many small fetches in a row is skipped for a time,
+// so that its failures do not hold back the requests to the other hosts.
+static const NSUInteger ZLFailuresToSkip = 2;
+static const NSTimeInterval ZLSkipTime = 120;
+
+static NSMutableDictionary *ZLFailedHosts(void) {
+    static NSMutableDictionary *hosts;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ hosts = [NSMutableDictionary dictionary]; });
+    return hosts;
+}
+
++ (void)forgetFailedHosts {
+    NSMutableDictionary *hosts = ZLFailedHosts();
+    @synchronized (hosts) {
+        [hosts removeAllObjects];
+    }
+}
+
 + (NSData *)fetch:(NSURL *)url headers:(NSDictionary *)headers finalURL:(NSURL **)finalURL error:(NSError **)error {
+    NSString *host = url.host ? ZLHostKey(url) : @"";
+    NSMutableDictionary *hosts = ZLFailedHosts();
+    @synchronized (hosts) {
+        NSDate *until = hosts[host][@"until"];
+        if (until && [until timeIntervalSinceNow] > 0) {
+            if (error) *error = ZLMakeError(ZLErrorMedia, [NSString stringWithFormat:@"The app skips %@ for a short time, because it failed.", url.host]);
+            return nil;
+        }
+    }
     NSError *failure = nil;
     NSData *data = [self fetchOnce:url headers:headers finalURL:finalURL error:&failure];
     if (!data && ZLCanRetry(failure)) {
         [NSThread sleepForTimeInterval:0.5];
         failure = nil;
         data = [self fetchOnce:url headers:headers finalURL:finalURL error:&failure];
+    }
+    @synchronized (hosts) {
+        if (data || !ZLCanRetry(failure)) {
+            [hosts removeObjectForKey:host];
+        } else {
+            NSUInteger count = [hosts[host][@"count"] unsignedIntegerValue] + 1;
+            NSDate *until = count >= ZLFailuresToSkip ? [NSDate dateWithTimeIntervalSinceNow:ZLSkipTime] : [NSDate distantPast];
+            hosts[host] = @{ @"count": @(count), @"until": until };
+            if (count == ZLFailuresToSkip) ZLLog(@"skip %@ for %.0f s", url.host, ZLSkipTime);
+        }
     }
     if (!data && error) *error = failure;
     return data;
