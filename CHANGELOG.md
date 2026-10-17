@@ -4,6 +4,16 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 1.0.0 (2026-10-17)
+
+The first stable release. It has all the parts of the plan: Stremio addons,
+the own player, the library, Live TV, and subtitles.
+
+- Fix: Home loads the first two catalogs for the banner. Before, the
+  banner stayed empty when the library rows pushed the catalogs below the
+  screen.
+- All the tests pass on the iPhone 4S with iOS 6.1.3.
+
 ## 0.7.0 (2026-10-17)
 
 Subtitles.
