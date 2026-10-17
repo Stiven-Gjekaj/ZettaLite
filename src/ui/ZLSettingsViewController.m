@@ -170,16 +170,37 @@
 
 #pragma mark - Playback
 
-// The switches of the playback, and the audio language.
+// The switches of the playback, the audio language, and the subtitles.
 @interface ZLPlaybackSettingsViewController : UITableViewController <UIActionSheetDelegate>
 @end
+
+// The tags of the sheets.
+enum { ZLSheetAudio = 1, ZLSheetSubtitleLanguage, ZLSheetSubtitleSize };
 
 @implementation ZLPlaybackSettingsViewController
 
 - (NSArray *)languages {
-    return @[ @[ @"The language of the phone", [NSNull null] ], @[ @"English", @"eng" ], @[ @"German", @"ger" ],
-              @[ @"French", @"fre" ], @[ @"Spanish", @"spa" ], @[ @"Italian", @"ita" ], @[ @"Albanian", @"alb" ],
-              @[ @"Portuguese", @"por" ], @[ @"Japanese", @"jpn" ], @[ @"Russian", @"rus" ], @[ @"Turkish", @"tur" ] ];
+    return @[ @[ @"English", @"eng" ], @[ @"German", @"ger" ], @[ @"French", @"fre" ], @[ @"Spanish", @"spa" ],
+              @[ @"Italian", @"ita" ], @[ @"Albanian", @"alb" ], @[ @"Portuguese", @"por" ], @[ @"Japanese", @"jpn" ],
+              @[ @"Russian", @"rus" ], @[ @"Turkish", @"tur" ] ];
+}
+
+- (NSArray *)audioLanguages {
+    return [@[ @[ @"The language of the phone", [NSNull null] ] ] arrayByAddingObjectsFromArray:[self languages]];
+}
+
+- (NSArray *)subtitleLanguages {
+    return [@[ @[ @"Off", [NSNull null] ] ] arrayByAddingObjectsFromArray:[self languages]];
+}
+
+- (NSArray *)subtitleSizes {
+    return @[ @[ @"Small", @15 ], @[ @"Medium", @18 ], @[ @"Large", @22 ], @[ @"Very large", @26 ] ];
+}
+
+- (NSArray *)choicesForSheet:(NSInteger)tag {
+    if (tag == ZLSheetAudio) return [self audioLanguages];
+    if (tag == ZLSheetSubtitleLanguage) return [self subtitleLanguages];
+    return [self subtitleSizes];
 }
 
 - (void)viewDidLoad {
@@ -190,11 +211,11 @@
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;
+    return 3;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return section == 0 ? 3 : 1;
+    return section == 0 ? 3 : section == 1 ? 1 : 2;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
@@ -202,15 +223,17 @@
         return @"Autoplay: Play starts the best stream at once, and the next one when a stream fails. Sources shows all "
                @"streams. A heavy stream needs more than the A5 chip can decode.";
     }
-    return @"The player picks this audio track first, when a file has more than one.";
+    if (section == 1) return @"The player picks this audio track first, when a file has more than one.";
+    return @"The player shows subtitles in this language at the start. It looks in the file first, then in the subtitle "
+           @"addons. Subs in the player changes them.";
 }
 
-- (NSString *)languageName {
-    NSString *code = [ZLSettings shared].audioLanguage;
-    for (NSArray *pair in [self languages]) {
-        if ([pair[1] isEqual:code ?: [NSNull null]]) return pair[0];
+// The name of a value in a list of choices.
+- (NSString *)nameOf:(id)value in:(NSArray *)choices {
+    for (NSArray *pair in choices) {
+        if ([pair[1] isEqual:value ?: [NSNull null]]) return pair[0];
     }
-    return code;
+    return [value description];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -220,9 +243,18 @@
     cell.textLabel.font = ZLBoldFont(15);
     cell.detailTextLabel.textColor = ZLSecondaryTextColor();
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    if (indexPath.section == 1) {
-        cell.textLabel.text = @"Audio language";
-        cell.detailTextLabel.text = [self languageName];
+    ZLSettings *settings = [ZLSettings shared];
+    if (indexPath.section > 0) {
+        if (indexPath.section == 1) {
+            cell.textLabel.text = @"Audio language";
+            cell.detailTextLabel.text = [self nameOf:settings.audioLanguage in:[self audioLanguages]];
+        } else if (indexPath.row == 0) {
+            cell.textLabel.text = @"Subtitle language";
+            cell.detailTextLabel.text = [self nameOf:settings.subtitleLanguage in:[self subtitleLanguages]];
+        } else {
+            cell.textLabel.text = @"Subtitle size";
+            cell.detailTextLabel.text = [self nameOf:@((NSInteger)settings.subtitleSize) in:[self subtitleSizes]];
+        }
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleBlue;
         return cell;
@@ -230,7 +262,6 @@
     UISwitch *toggle = [UISwitch new];
     toggle.tag = indexPath.row;
     [toggle addTarget:self action:@selector(toggled:) forControlEvents:UIControlEventValueChanged];
-    ZLSettings *settings = [ZLSettings shared];
     NSArray *titles = @[ @"Autoplay", @"Show heavy streams", @"Play the next episode" ];
     NSArray *values = @[ @(settings.autoplay), @(settings.showHeavyStreams), @(settings.playNextEpisode) ];
     cell.textLabel.text = titles[(NSUInteger)indexPath.row];
@@ -248,18 +279,25 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.section != 1) return;
-    UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:@"Audio language" delegate:self cancelButtonTitle:nil
+    if (indexPath.section == 0) return;
+    NSInteger tag = indexPath.section == 1 ? ZLSheetAudio : indexPath.row == 0 ? ZLSheetSubtitleLanguage : ZLSheetSubtitleSize;
+    NSString *title = [tableView cellForRowAtIndexPath:indexPath].textLabel.text;
+    UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:title delegate:self cancelButtonTitle:nil
                                          destructiveButtonTitle:nil otherButtonTitles:nil];
-    for (NSArray *pair in [self languages]) [sheet addButtonWithTitle:pair[0]];
+    sheet.tag = tag;
+    for (NSArray *pair in [self choicesForSheet:tag]) [sheet addButtonWithTitle:pair[0]];
     sheet.cancelButtonIndex = [sheet addButtonWithTitle:@"Cancel"];
     [sheet showFromTabBar:self.tabBarController.tabBar];
 }
 
 - (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)index {
-    if (index == sheet.cancelButtonIndex || index >= (NSInteger)[self languages].count) return;
-    id code = [self languages][(NSUInteger)index][1];
-    [ZLSettings shared].audioLanguage = code == [NSNull null] ? nil : code;
+    NSArray *choices = [self choicesForSheet:sheet.tag];
+    if (index == sheet.cancelButtonIndex || index < 0 || index >= (NSInteger)choices.count) return;
+    id value = choices[(NSUInteger)index][1];
+    ZLSettings *settings = [ZLSettings shared];
+    if (sheet.tag == ZLSheetAudio) settings.audioLanguage = value == [NSNull null] ? nil : value;
+    if (sheet.tag == ZLSheetSubtitleLanguage) settings.subtitleLanguage = value == [NSNull null] ? nil : value;
+    if (sheet.tag == ZLSheetSubtitleSize) settings.subtitleSize = [value doubleValue];
     [self.tableView reloadData];
 }
 
