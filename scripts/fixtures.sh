@@ -40,6 +40,20 @@ index.m3u8
 ../hevc-aac.mkv
 M3U
 cp "$ROOT/resources/Icon@2x.png" live/logo.png
+# Text subtitles inside a file: SubRip and ASS in Matroska, mov_text in MP4.
+cat >subs.srt <<SRT
+1
+00:00:01,000 --> 00:00:03,000
+<i>First line</i>
+
+2
+00:00:10,000 --> 00:00:12,500
+Second line
+with two rows
+SRT
+$F -i h264-aac.mp4 -i subs.srt -map 0 -map 1 -c copy -c:s srt -metadata:s:s:0 language=eng subs-srt.mkv
+$F -i h264-aac.mp4 -i subs.srt -map 0 -map 1 -c copy -c:s ass subs-ass.mkv
+$F -i h264-aac.mp4 -i subs.srt -map 0 -map 1 -c copy -c:s mov_text subs-text.mp4
 # The stamp tells scripts/test.sh which version of this script made the files.
 shasum "$ROOT/scripts/fixtures.sh" | cut -d" " -f1 >stamp
 ls -l "$OUT"
