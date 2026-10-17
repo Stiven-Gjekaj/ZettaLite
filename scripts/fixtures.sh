@@ -54,6 +54,7 @@ SRT
 $F -i h264-aac.mp4 -i subs.srt -map 0 -map 1 -c copy -c:s srt -metadata:s:s:0 language=eng subs-srt.mkv
 $F -i h264-aac.mp4 -i subs.srt -map 0 -map 1 -c copy -c:s ass subs-ass.mkv
 $F -i h264-aac.mp4 -i subs.srt -map 0 -map 1 -c copy -c:s mov_text subs-text.mp4
+$F -i hevc-aac.mkv -i subs.srt -map 0 -map 1 -c copy -c:s srt -metadata:s:s:0 language=eng subs-hevc.mkv
 # The stamp tells scripts/test.sh which version of this script made the files.
 shasum "$ROOT/scripts/fixtures.sh" | cut -d" " -f1 >stamp
 ls -l "$OUT"
