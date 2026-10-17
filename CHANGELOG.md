@@ -4,6 +4,21 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 0.7.0 (2026-10-17)
+
+Subtitles.
+
+- Both players show subtitles. Subs in the player gives the choices: Off,
+  the text subtitles inside the file, and the subtitles of the addons.
+- The app reads SRT and WebVTT files, and SubRip, WebVTT, mov_text, and ASS
+  subtitles inside MKV and MP4 files. It removes the styles.
+- The app asks the subtitle addons, for example OpenSubtitles v3, for each
+  title, and it also reads the subtitles that a stream gives.
+- Settings, Playback, has Subtitle language and Subtitle size. The player
+  picks the language at the start, from the file first.
+- Fix: the tests on the phone link CoreGraphics again, and an addon test
+  makes its URL as a pasted source makes it, so that iOS 6 accepts it.
+
 ## 0.6.0 (2026-10-17)
 
 Live TV.
