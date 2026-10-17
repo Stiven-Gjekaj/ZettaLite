@@ -220,6 +220,9 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
     self.tableView.backgroundView = empty ? self.emptyView : nil;
     self.tableView.tableHeaderView = empty ? nil : self.banner;
     [self.tableView reloadData];
+    // A row loads its catalog when it shows. The library rows can push the
+    // catalogs below the screen, so load the first ones for the banner.
+    for (NSUInteger i = 0; i < MIN((NSUInteger)2, catalogs.count); i++) [self loadCatalog:catalogs[i]];
     [self updateBanner];
 }
 
