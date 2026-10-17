@@ -29,7 +29,7 @@ _Native UIKit, FFmpeg on the phone, HTTP streams only_
 ---
 
 > [!NOTE]
-> **Version 1.0.0 is out.** It shows the catalogs of your Stremio addons,
+> **Version 1.0.1 is out.** It shows the catalogs of your Stremio addons,
 > plays their HTTP streams, keeps a library on the phone, plays IPTV
 > playlists as live TV, and shows subtitles.
 > [CHANGELOG.md](CHANGELOG.md) lists the changes of each release.
