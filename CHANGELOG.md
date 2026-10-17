@@ -4,6 +4,24 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 0.6.0 (2026-10-17)
+
+Live TV.
+
+- The Live TV tab shows the channels of the M3U playlists and the media
+  links in Sources. The first screen shows the favourite channels and the
+  groups. The search bar finds a channel by name.
+- The app reads the logo, the group, and the headers of each channel, from
+  `#EXTINF`, `#EXTGRP`, `#EXTVLCOPT`, `#EXTHTTP`, and links with `|`.
+- A `.m3u8` link can be a list of channels or one HLS stream. The app reads
+  it and knows which.
+- HLS channels play in the system player. MPEG-TS channels play through the
+  live remux.
+- The star marks a favourite channel. The backup keeps the favourites.
+- `zettalite://live?group=NAME` opens a group.
+  `zettalite://live?channel=NAME` plays a channel.
+- The log shows each link that opens the app.
+
 ## 0.5.0 (2026-10-17)
 
 The library.
