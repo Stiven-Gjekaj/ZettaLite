@@ -19,6 +19,8 @@ static const CGFloat ZLLogoSize = 36;
 @property (nonatomic, strong) NSArray *favourites;
 @property (nonatomic, strong) NSArray *groups;
 @property (nonatomic, strong) NSArray *channels;
+// A link that waits for the channels to load.
+@property (nonatomic, copy) void (^pendingLink)(void);
 @end
 
 @implementation ZLLiveViewController
@@ -70,6 +72,11 @@ static const CGFloat ZLLogoSize = 36;
 }
 
 - (void)reload {
+    if (self.pendingLink && ![ZLChannelList shared].loading) {
+        void (^pending)(void) = self.pendingLink;
+        self.pendingLink = nil;
+        dispatch_async(dispatch_get_main_queue(), pending);
+    }
     ZLChannelList *list = [ZLChannelList shared];
     NSArray *channels = self.group ? [list channelsInGroup:self.group] : list.channels;
     if (self.query.length) {
@@ -110,6 +117,41 @@ static const CGFloat ZLLogoSize = 36;
     if (empty) empty.frame = self.tableView.bounds;
     self.tableView.backgroundView = empty;
     self.searchBar.hidden = !list.channels.count;
+}
+
+- (void)whenLoaded:(void (^)(void))block {
+    ZLChannelList *list = [ZLChannelList shared];
+    if (!list.channels.count && !list.loading) [list reload];
+    if (list.loading) self.pendingLink = block;
+    else block();
+}
+
+- (void)openGroup:(NSString *)group {
+    __weak ZLLiveViewController *weakSelf = self;
+    [self whenLoaded:^{
+        if (![[[ZLChannelList shared] groups] containsObject:group]) return;
+        [weakSelf.navigationController pushViewController:[[ZLLiveViewController alloc] initWithGroup:group] animated:NO];
+    }];
+}
+
+- (void)playChannelNamed:(NSString *)name {
+    __weak ZLLiveViewController *weakSelf = self;
+    [self whenLoaded:^{
+        for (ZLChannel *channel in [ZLChannelList shared].channels) {
+            if ([channel.name caseInsensitiveCompare:name] != NSOrderedSame) continue;
+            [weakSelf playChannel:channel];
+            return;
+        }
+    }];
+}
+
+- (void)playChannel:(ZLChannel *)channel {
+    ZLPlayItem *play = [ZLPlayItem itemWithURL:channel.URL title:channel.name];
+    play.headers = channel.headers;
+    play.sourceName = channel.group;
+    // After a pop with no animation, this view is not in the window yet. The
+    // navigation controller is.
+    [ZLPlayback play:play from:self.navigationController ?: self];
 }
 
 - (void)showSources {
@@ -272,11 +314,7 @@ static const CGFloat ZLLogoSize = 36;
         [self.navigationController pushViewController:[[ZLLiveViewController alloc] initWithGroup:item] animated:YES];
         return;
     }
-    ZLChannel *channel = item;
-    ZLPlayItem *play = [ZLPlayItem itemWithURL:channel.URL title:channel.name];
-    play.headers = channel.headers;
-    play.sourceName = channel.group;
-    [ZLPlayback play:play from:self];
+    [self playChannel:item];
 }
 
 @end

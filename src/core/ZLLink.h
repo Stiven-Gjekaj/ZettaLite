@@ -4,6 +4,8 @@
 //   zettalite://watch?type=TYPE&id=ID              plays the best stream of a title or an episode
 //   zettalite://search?q=TEXT                      searches in all addons
 //   zettalite://tab?name=NAME                      opens a tab: home, search, library, live, settings
+//   zettalite://live?group=NAME                   opens a group of channels
+//   zettalite://live?channel=NAME                 plays the first channel with this name
 // Each value is percent-encoded.
 
 #import <Foundation/Foundation.h>
@@ -14,6 +16,7 @@ typedef NS_ENUM(NSInteger, ZLLinkKind) {
     ZLLinkWatch,
     ZLLinkSearch,
     ZLLinkTab,
+    ZLLinkLive,
 };
 
 @interface ZLLink : NSObject
@@ -23,7 +26,7 @@ typedef NS_ENUM(NSInteger, ZLLinkKind) {
 @property (nonatomic) double startTime;
 @property (nonatomic, copy) NSString *type;
 @property (nonatomic, copy) NSString *identifier;
-@property (nonatomic, copy) NSString *text;  // The search text or the name of the tab.
+@property (nonatomic, copy) NSString *text;  // The search text, the name of the tab, or the group.
 @end
 
 // Returns nil for a link that the app does not know.

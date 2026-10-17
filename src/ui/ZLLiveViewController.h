@@ -9,4 +9,8 @@
 - (instancetype)init;
 // The channels of one group.
 - (instancetype)initWithGroup:(NSString *)group;
+// Shows a group. When the channels load now, it waits for them.
+- (void)openGroup:(NSString *)group;
+// Plays the first channel with this name. It ignores the case.
+- (void)playChannelNamed:(NSString *)name;
 @end

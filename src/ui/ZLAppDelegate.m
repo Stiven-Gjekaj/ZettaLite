@@ -21,6 +21,7 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
 @property (nonatomic, strong) ZLTabBarController *tabs;
 @property (nonatomic, strong) ZLSettingsViewController *settings;
 @property (nonatomic, strong) ZLSearchViewController *search;
+@property (nonatomic, strong) ZLLiveViewController *live;
 @end
 
 @implementation ZLAppDelegate
@@ -36,13 +37,14 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
     self.window.backgroundColor = [UIColor blackColor];
     self.settings = [ZLSettingsViewController new];
     self.search = [ZLSearchViewController new];
+    self.live = [ZLLiveViewController new];
     self.tabs = [ZLTabBarController new];
     self.tabs.viewControllers = @[
         [[ZLNavigationController alloc] initWithRootViewController:[ZLHomeViewController new]],
         [[ZLNavigationController alloc] initWithRootViewController:self.search],
         [[ZLNavigationController alloc] initWithRootViewController:[ZLLibraryViewController new]],
         [[ZLNavigationController alloc] initWithRootViewController:
-            [ZLLiveViewController new]],
+            self.live],
         [[ZLNavigationController alloc] initWithRootViewController:self.settings],
     ];
     self.window.rootViewController = self.tabs;
@@ -74,6 +76,12 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
             [navigation popToRootViewControllerAnimated:NO];
             break;
         }
+        case ZLLinkLive:
+            self.tabs.selectedIndex = 3;
+            [self.live.navigationController popToRootViewControllerAnimated:NO];
+            if (link.text) [self.live openGroup:link.text];
+            if (link.title) [self.live playChannelNamed:link.title];
+            break;
         case ZLLinkSearch:
             self.tabs.selectedIndex = 1;
             [self.search.navigationController popToRootViewControllerAnimated:NO];

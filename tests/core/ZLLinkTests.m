@@ -39,3 +39,14 @@ ZL_TEST(test_pasted_text_becomes_a_url) {
     ZL_EXPECT(ZLMediaURLFromText(@"example.org/v.mp4") == nil);
     ZL_EXPECT(ZLMediaURLFromText(@"") == nil);
 }
+
+ZL_TEST(test_link_reads_live_links) {
+    ZLLink *link = ZLParseLink([NSURL URLWithString:@"zettalite://live?group=News%20%26%20Weather"]);
+    ZL_EQUAL_INT(link.kind, ZLLinkLive);
+    ZL_EQUAL(link.text, @"News & Weather");
+    ZL_EXPECT(link.title == nil);
+    link = ZLParseLink([NSURL URLWithString:@"zettalite://live?channel=News%20One"]);
+    ZL_EQUAL_INT(link.kind, ZLLinkLive);
+    ZL_EQUAL(link.title, @"News One");
+    ZL_EXPECT(ZLParseLink([NSURL URLWithString:@"zettalite://live"]) == nil);
+}

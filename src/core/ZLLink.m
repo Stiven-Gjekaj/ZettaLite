@@ -54,6 +54,11 @@ ZLLink *ZLParseLink(NSURL *url) {
         if (![tabs containsObject:query[@"name"]]) return nil;
         link.kind = ZLLinkTab;
         link.text = query[@"name"];
+    } else if ([host isEqualToString:@"live"]) {
+        if (![query[@"group"] length] && ![query[@"channel"] length]) return nil;
+        link.kind = ZLLinkLive;
+        link.text = query[@"group"];
+        link.title = query[@"channel"];
     } else {
         return nil;
     }
