@@ -8,8 +8,9 @@ plays their HTTP streams. FFmpeg on the phone changes each stream into a
 form that the iOS 6 player plays. For a codec that the phone cannot decode
 in hardware, the app has its own software player.
 
-The app is in development. [TODO.md](TODO.md) has the plan, and
-[docs/decisions.md](docs/decisions.md) has each decision and its reason.
+Version 1.0.0 has all the parts of the plan in [TODO.md](TODO.md).
+[docs/decisions.md](docs/decisions.md) has each decision and its reason,
+and [CHANGELOG.md](CHANGELOG.md) has the changes of each release.
 
 ## How ZettaLite differs from ZettaStream
 
