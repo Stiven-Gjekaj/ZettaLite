@@ -40,4 +40,6 @@ index.m3u8
 ../hevc-aac.mkv
 M3U
 cp "$ROOT/resources/Icon@2x.png" live/logo.png
+# The stamp tells scripts/test.sh which version of this script made the files.
+shasum "$ROOT/scripts/fixtures.sh" | cut -d" " -f1 >stamp
 ls -l "$OUT"

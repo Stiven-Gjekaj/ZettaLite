@@ -36,10 +36,13 @@ if [ "$1" = "--phone" ]; then
     ssh iphone4s 'mkdir -p /tmp/zltests'
     scp -q "$OUT/zltests-armv7" iphone4s:/tmp/zltests/zltests
     scp -q "$FFMPEG/lib/libzlffmpeg.dylib" "$ROOT/resources/cacert.pem" iphone4s:/tmp/zltests/
-    if [ ! -d "$ROOT/build/fixtures" ]; then
+    # Make the fixtures again and copy them again when scripts/fixtures.sh changes.
+    STAMP=$(shasum "$ROOT/scripts/fixtures.sh" | cut -d" " -f1)
+    if [ "$(cat "$ROOT/build/fixtures/stamp" 2>/dev/null)" != "$STAMP" ]; then
         "$ROOT/scripts/fixtures.sh" >/dev/null
     fi
-    if ! ssh iphone4s 'test -d /tmp/zltests/fixtures/dash'; then
+    if [ "$(ssh iphone4s 'cat /tmp/zltests/fixtures/stamp 2>/dev/null')" != "$STAMP" ]; then
+        ssh iphone4s 'rm -rf /tmp/zltests/fixtures'
         # The sftp server of the phone cannot make a new directory, so copy with tar.
         COPYFILE_DISABLE=1 tar --no-xattrs -C "$ROOT/build" -cf - fixtures | ssh iphone4s 'tar -C /tmp/zltests -xf -'
     fi
