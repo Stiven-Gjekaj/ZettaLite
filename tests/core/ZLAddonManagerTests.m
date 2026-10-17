@@ -61,3 +61,73 @@ ZL_TEST(test_fetch_puts_a_high_request_before_the_normal_ones_that_wait) {
     [server stop];
 }
 
+static ZLStore *TemporaryStore(void) {
+    return [[ZLStore alloc] initWithDirectory:[NSTemporaryDirectory() stringByAppendingPathComponent:[[NSUUID UUID] UUIDString]]];
+}
+
+// Runs the run loop until the condition is true, or for some seconds.
+static BOOL WaitFor(BOOL (^condition)(void), NSTimeInterval seconds) {
+    NSDate *until = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    while (!condition() && [until timeIntervalSinceNow] > 0) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+    }
+    return condition();
+}
+
+static void RunFor(NSTimeInterval seconds) {
+    WaitFor(^{ return NO; }, seconds);
+}
+
+// A test addon with a catalog for Home and ten catalogs with search.
+static NSURL *ServeAddon(ZLTestServer *server) {
+    NSMutableArray *catalogs = [NSMutableArray arrayWithObject:@{ @"type": @"movie", @"id": @"top", @"name": @"Top" }];
+    for (int i = 0; i < 10; i++) {
+        NSString *identifier = [NSString stringWithFormat:@"find%d", i];
+        [catalogs addObject:@{ @"type": @"movie", @"id": identifier, @"name": identifier,
+                               @"extra": @[ @{ @"name": @"search", @"isRequired": @YES } ] }];
+        for (NSString *query in @[ @"a", @"b" ]) {
+            [server serve:JSON(@{ @"metas": @[ @{ @"id": [@"tt" stringByAppendingString:query], @"type": @"movie", @"name": query } ] })
+                       at:[NSString stringWithFormat:@"/catalog/movie/%@/search=%@.json", identifier, query] type:@"application/json"];
+        }
+    }
+    [server serve:JSON(@{ @"metas": @[ @{ @"id": @"tt1", @"type": @"movie", @"name": @"One" } ] })
+               at:@"/catalog/movie/top.json" type:@"application/json"];
+    return [server serve:JSON(@{ @"id": @"test", @"name": @"Test", @"types": @[ @"movie" ], @"resources": @[ @"catalog" ], @"catalogs": catalogs })
+                      at:@"/manifest.json" type:@"application/json"];
+}
+
+static ZLAddonManager *Manager(ZLStore *store, NSURL *manifest) {
+    ZLSourceList *sources = [[ZLSourceList alloc] initWithStore:store];
+    [sources setText:manifest.absoluteString];
+    return [[ZLAddonManager alloc] initWithStore:store sources:sources];
+}
+
+ZL_TEST(test_manager_asks_for_a_manifest_again_only_when_it_is_old) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSURL *manifest = ServeAddon(server);
+    ZLStore *store = TemporaryStore();
+    ZLAddonManager *manager = Manager(store, manifest);
+    [manager reload];
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(manager.addons.count == 1 && server.requestCount == 1); }, 10));
+    RunFor(0.2);
+
+    // A start a moment later uses the manifest on the phone.
+    ZLAddonManager *again = Manager(store, manifest);
+    [again reload];
+    ZL_EQUAL_INT(again.addons.count, 1);
+    RunFor(0.5);
+    ZL_EQUAL_INT(server.requestCount, 1);
+
+    // A refresh asks again.
+    [again refresh];
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(server.requestCount == 2); }, 10));
+
+    // A manifest older than 6 hours is asked again.
+    [store setObject:@{ manifest.absoluteString: @([[NSDate date] timeIntervalSince1970] - 7 * 3600) } named:@"manifestDates"];
+    ZLAddonManager *later = Manager(store, manifest);
+    [later reload];
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(server.requestCount == 3); }, 10));
+    [server stop];
+}
+

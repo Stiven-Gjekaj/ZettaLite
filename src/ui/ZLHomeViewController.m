@@ -166,7 +166,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
 - (void)refresh {
     [self.results removeAllObjects];
     [self.errors removeAllObjects];
-    [[ZLAddonManager shared] reload];
+    [[ZLAddonManager shared] refresh];
     [self.refreshControl endRefreshing];
 }
 

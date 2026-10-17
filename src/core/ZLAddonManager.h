@@ -34,8 +34,11 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
 // The sources whose manifest failed to load, with the error text.
 @property (nonatomic, readonly) NSDictionary *failures;
 
-// Loads the manifests again. The manifests on the phone show at once.
+// Loads the manifests that are not on the phone or that are older than 6
+// hours. The manifests on the phone show at once.
 - (void)reload;
+// Loads all the manifests again.
+- (void)refresh;
 
 // The catalogs that can be rows of Home: the ones with no required extra.
 - (NSArray *)homeCatalogs;

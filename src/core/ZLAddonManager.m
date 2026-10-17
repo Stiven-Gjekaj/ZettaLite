@@ -10,6 +10,8 @@ NSString *const ZLAddonsDidChangeNotification = @"ZLAddonsDidChange";
 
 // The answers of a catalog stay this long in memory.
 static const NSTimeInterval ZLCatalogLifetime = 10 * 60;
+// A manifest changes seldom. The app asks again after this time.
+static const NSTimeInterval ZLManifestLifetime = 6 * 3600;
 
 static NSOperationQueue *ZLNetworkQueue(void) {
     static NSOperationQueue *queue;
@@ -84,16 +86,31 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
 #pragma mark - Manifests
 
 - (void)reload {
+    [self reloadAll:NO];
+}
+
+- (void)refresh {
+    [self reloadAll:YES];
+}
+
+- (void)reloadAll:(BOOL)all {
     NSUInteger generation = ++self.generation;
     NSArray *sources = [self.sources sourcesOfKind:ZLSourceAddon];
     NSDictionary *saved = [self.store objectNamed:@"manifests"] ?: @{};
+    NSDictionary *dates = [self.store objectNamed:@"manifestDates"] ?: @{};
     NSMutableDictionary *manifests = [NSMutableDictionary dictionary];
+    NSMutableDictionary *fetched = [NSMutableDictionary dictionary];
+    NSMutableArray *old = [NSMutableArray array];
+    double now = [[NSDate date] timeIntervalSince1970];
     for (ZLSource *source in sources) {
-        NSDictionary *manifest = saved[source.URL.absoluteString];
-        if ([manifest isKindOfClass:[NSDictionary class]]) manifests[source.URL.absoluteString] = manifest;
+        NSString *key = source.URL.absoluteString;
+        NSDictionary *manifest = saved[key];
+        if ([manifest isKindOfClass:[NSDictionary class]]) manifests[key] = manifest;
+        if ([dates[key] isKindOfClass:[NSNumber class]]) fetched[key] = dates[key];
+        if (all || !manifests[key] || now - [fetched[key] doubleValue] > ZLManifestLifetime) [old addObject:source];
     }
     [self buildFrom:manifests sources:sources failures:@{}];
-    if (!sources.count) {
+    if (!old.count) {
         [self finishLoading];
         return;
     }
@@ -101,10 +118,9 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
     self.loading = manifests.count < sources.count;
 
     NSDate *start = [NSDate date];
-    // Get each manifest again, so that a change of an addon shows.
-    __block NSUInteger left = sources.count;
+    __block NSUInteger left = old.count;
     NSMutableDictionary *failures = [NSMutableDictionary dictionary];
-    for (ZLSource *source in sources) {
+    for (ZLSource *source in old) {
         NSString *key = source.URL.absoluteString;
         // A refresh of a manifest on the phone must not hold back the requests
         // that the viewer waits for. A new manifest is one of them.
@@ -113,12 +129,15 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
             if (generation != self.generation) return;
             if ([json isKindOfClass:[NSDictionary class]] && (json[@"id"] || json[@"catalogs"] || json[@"resources"])) {
                 manifests[key] = json;
+                fetched[key] = @([[NSDate date] timeIntervalSince1970]);
             } else if (!manifests[key]) {
                 failures[key] = error.localizedDescription ?: @"The link does not give an addon manifest.";
             }
             if (--left == 0) {
-                ZLLog(@"time manifests %lu: %.2f s", (unsigned long)sources.count, -[start timeIntervalSinceNow]);
+                ZLLog(@"time manifests %lu of %lu: %.2f s", (unsigned long)old.count, (unsigned long)sources.count,
+                      -[start timeIntervalSinceNow]);
                 [self.store setObject:manifests named:@"manifests"];
+                [self.store setObject:fetched named:@"manifestDates"];
                 [self buildFrom:manifests sources:sources failures:failures];
                 [self finishLoading];
             }
