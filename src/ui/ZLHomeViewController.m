@@ -134,6 +134,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
         _offsets = [NSMutableDictionary dictionary];
         NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
         [center addObserver:self selector:@selector(addonsChanged) name:ZLAddonsDidChangeNotification object:nil];
+        [center addObserver:self selector:@selector(catalogUpdated:) name:ZLCatalogDidUpdateNotification object:nil];
         [center addObserver:self selector:@selector(libraryChanged) name:ZLLibraryDidChangeNotification object:nil];
         [center addObserver:self selector:@selector(libraryChanged) name:ZLNewEpisodesDidChangeNotification object:nil];
     }
@@ -315,6 +316,19 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
         }
         [self updateBanner];
     }];
+}
+
+// A row showed the copy on the phone. The newer answer replaces it.
+- (void)catalogUpdated:(NSNotification *)note {
+    NSString *url = note.userInfo[@"url"];
+    for (NSUInteger row = 0; row < self.catalogs.count; row++) {
+        ZLCatalog *catalog = self.catalogs[row];
+        if (![[catalog URLWithExtras:nil].absoluteString isEqualToString:url]) continue;
+        self.results[catalog.key] = note.userInfo[@"metas"];
+        [self.tableView reloadRowsAtIndexPaths:@[ [NSIndexPath indexPathForRow:(NSInteger)row inSection:1] ]
+                              withRowAnimation:UITableViewRowAnimationNone];
+        [self updateBanner];
+    }
 }
 
 #pragma mark - Rows

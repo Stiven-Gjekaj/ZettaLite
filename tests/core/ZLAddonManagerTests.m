@@ -96,10 +96,10 @@ static NSURL *ServeAddon(ZLTestServer *server) {
                       at:@"/manifest.json" type:@"application/json"];
 }
 
-static ZLAddonManager *Manager(ZLStore *store, NSURL *manifest) {
+static ZLAddonManager *Manager(ZLStore *store, ZLStore *cache, NSURL *manifest) {
     ZLSourceList *sources = [[ZLSourceList alloc] initWithStore:store];
     [sources setText:manifest.absoluteString];
-    return [[ZLAddonManager alloc] initWithStore:store sources:sources];
+    return [[ZLAddonManager alloc] initWithStore:store cache:cache sources:sources];
 }
 
 ZL_TEST(test_manager_asks_for_a_manifest_again_only_when_it_is_old) {
@@ -107,13 +107,13 @@ ZL_TEST(test_manager_asks_for_a_manifest_again_only_when_it_is_old) {
     ZL_EXPECT([server start]);
     NSURL *manifest = ServeAddon(server);
     ZLStore *store = TemporaryStore();
-    ZLAddonManager *manager = Manager(store, manifest);
+    ZLAddonManager *manager = Manager(store, TemporaryStore(), manifest);
     [manager reload];
     ZL_EXPECT(WaitFor(^{ return (BOOL)(manager.addons.count == 1 && server.requestCount == 1); }, 10));
     RunFor(0.2);
 
     // A start a moment later uses the manifest on the phone.
-    ZLAddonManager *again = Manager(store, manifest);
+    ZLAddonManager *again = Manager(store, TemporaryStore(), manifest);
     [again reload];
     ZL_EQUAL_INT(again.addons.count, 1);
     RunFor(0.5);
@@ -125,9 +125,60 @@ ZL_TEST(test_manager_asks_for_a_manifest_again_only_when_it_is_old) {
 
     // A manifest older than 6 hours is asked again.
     [store setObject:@{ manifest.absoluteString: @([[NSDate date] timeIntervalSince1970] - 7 * 3600) } named:@"manifestDates"];
-    ZLAddonManager *later = Manager(store, manifest);
+    ZLAddonManager *later = Manager(store, TemporaryStore(), manifest);
     [later reload];
     ZL_EXPECT(WaitFor(^{ return (BOOL)(server.requestCount == 3); }, 10));
+    [server stop];
+}
+
+ZL_TEST(test_manager_shows_the_copy_of_a_catalog_and_then_the_new_answer) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSURL *manifest = ServeAddon(server);
+    ZLStore *store = TemporaryStore();
+    ZLStore *cache = TemporaryStore();
+    ZLAddonManager *manager = Manager(store, cache, manifest);
+    [manager reload];
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(manager.addons.count == 1); }, 10));
+    __block NSArray *answer = nil;
+    [manager loadCatalog:[manager.addons[0] catalogs][0] extras:nil completion:^(NSArray *metas, NSError *error) { answer = metas; }];
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(answer != nil); }, 10));
+    ZL_EQUAL_INT(answer.count, 1);
+    [cache flush];
+    NSUInteger requests = server.requestCount;
+
+    // A new start shows the copy at once, with no request.
+    ZLStore *cacheAgain = [[ZLStore alloc] initWithDirectory:cache.directory];
+    ZLAddonManager *again = Manager(store, cacheAgain, manifest);
+    [again reload];
+    answer = nil;
+    [again loadCatalog:[again.addons[0] catalogs][0] extras:nil completion:^(NSArray *metas, NSError *error) { answer = metas; }];
+    ZL_EQUAL([answer.firstObject name], @"One");
+    RunFor(0.3);
+    ZL_EQUAL_INT(server.requestCount, requests);
+
+    // An old copy shows at once, and the new answer comes after it.
+    NSString *name = nil;
+    for (NSString *file in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:cache.directory error:NULL]) {
+        if ([file hasPrefix:@"catalog-"]) name = file.stringByDeletingPathExtension;
+    }
+    NSMutableDictionary *copy = [[cacheAgain objectNamed:name] mutableCopy];
+    copy[@"date"] = @([[NSDate date] timeIntervalSince1970] - 3600);
+    [cacheAgain setObject:copy named:name];
+    [server serve:JSON(@{ @"metas": @[ @{ @"id": @"tt1", @"type": @"movie", @"name": @"One" }, @{ @"id": @"tt2", @"type": @"movie", @"name": @"Two" } ] })
+               at:@"/catalog/movie/top.json" type:@"application/json"];
+    __block NSArray *newer = nil;
+    id observer = [[NSNotificationCenter defaultCenter] addObserverForName:ZLCatalogDidUpdateNotification object:nil queue:nil
+                                                                usingBlock:^(NSNotification *note) { newer = note.userInfo[@"metas"]; }];
+    ZLAddonManager *later = Manager(store, cacheAgain, manifest);
+    [later reload];
+    answer = nil;
+    [later loadCatalog:[later.addons[0] catalogs][0] extras:nil completion:^(NSArray *metas, NSError *error) { answer = metas; }];
+    ZL_EQUAL_INT(answer.count, 1);
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(newer != nil); }, 10));
+    ZL_EQUAL_INT(newer.count, 2);
+    ZL_EQUAL_INT(server.requestCount, requests + 1);
+    [[NSNotificationCenter defaultCenter] removeObserver:observer];
     [server stop];
 }
 
@@ -135,7 +186,7 @@ ZL_TEST(test_manager_stops_the_requests_of_an_old_search) {
     ZLTestServer *server = [ZLTestServer new];
     ZL_EXPECT([server start]);
     NSURL *manifest = ServeAddon(server);
-    ZLAddonManager *manager = Manager(TemporaryStore(), manifest);
+    ZLAddonManager *manager = Manager(TemporaryStore(), TemporaryStore(), manifest);
     [manager reload];
     ZL_EXPECT(WaitFor(^{ return (BOOL)(manager.addons.count == 1); }, 10));
     NSUInteger requests = server.requestCount;

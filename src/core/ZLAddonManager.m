@@ -7,9 +7,13 @@
 #import "ZLTrust.h"
 
 NSString *const ZLAddonsDidChangeNotification = @"ZLAddonsDidChange";
+NSString *const ZLCatalogDidUpdateNotification = @"ZLCatalogDidUpdate";
 
-// The answers of a catalog stay this long in memory.
+// An answer of a catalog is new for this long. After it, the app shows the
+// copy and asks again.
 static const NSTimeInterval ZLCatalogLifetime = 10 * 60;
+// The app does not show a copy of a catalog that is older than this.
+static const NSTimeInterval ZLCatalogCopyLifetime = 7 * 24 * 3600;
 // A manifest changes seldom. The app asks again after this time.
 static const NSTimeInterval ZLManifestLifetime = 6 * 3600;
 
@@ -43,8 +47,19 @@ NSOperation *ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void 
     return operation;
 }
 
+// A short name for the file of a catalog: FNV-1a of its URL.
+static NSString *ZLCatalogFileName(NSString *url) {
+    uint64_t hash = 14695981039346656037ULL;
+    for (const char *c = url.UTF8String; *c; c++) {
+        hash ^= (uint8_t)*c;
+        hash *= 1099511628211ULL;
+    }
+    return [NSString stringWithFormat:@"catalog-%016llx", hash];
+}
+
 @interface ZLAddonManager ()
 @property (nonatomic, strong) ZLStore *store;
+@property (nonatomic, strong) ZLStore *cache;
 @property (nonatomic, strong) ZLSourceList *sources;
 @property (nonatomic) NSUInteger searchGeneration;
 @property (nonatomic, strong) NSMutableArray *searchOperations;
@@ -63,14 +78,17 @@ NSOperation *ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void 
     static ZLAddonManager *shared;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        shared = [[ZLAddonManager alloc] initWithStore:[ZLStore shared] sources:[ZLSourceList shared]];
+        NSString *caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+        ZLStore *cache = [[ZLStore alloc] initWithDirectory:[caches stringByAppendingPathComponent:@"ZettaLite/Catalogs"]];
+        shared = [[ZLAddonManager alloc] initWithStore:[ZLStore shared] cache:cache sources:[ZLSourceList shared]];
     });
     return shared;
 }
 
-- (instancetype)initWithStore:(ZLStore *)store sources:(ZLSourceList *)sources {
+- (instancetype)initWithStore:(ZLStore *)store cache:(ZLStore *)cache sources:(ZLSourceList *)sources {
     if ((self = [super init])) {
         _store = store;
+        _cache = cache;
         _sources = sources;
         _addons = @[];
         _failures = @{};
@@ -201,7 +219,7 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
     [self fetchCatalog:catalog extras:extras completion:completion];
 }
 
-// Returns the operation of the request, or nil when the answer was in memory.
+// Returns the operation of the request, or nil when the answer came from a copy.
 - (NSOperation *)fetchCatalog:(ZLCatalog *)catalog extras:(NSDictionary *)extras
                    completion:(void (^)(NSArray *metas, NSError *error))completion {
     NSURL *url = [catalog URLWithExtras:extras];
@@ -212,11 +230,35 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
         return nil;
     }
     ZLAddon *addon = catalog.addon;
+    // A catalog with no extras, for example a row of Home, has a copy on the phone.
+    BOOL keep = extras.count == 0;
+    if (keep && !cached) {
+        NSDictionary *copy = [self.cache objectNamed:ZLCatalogFileName(key)];
+        double age = [[NSDate date] timeIntervalSince1970] - [copy[@"date"] doubleValue];
+        if ([copy isKindOfClass:[NSDictionary class]] && [copy[@"url"] isEqual:key] && age < ZLCatalogCopyLifetime) {
+            NSArray *metas = ZLMetasFrom(copy[@"json"], addon);
+            NSDate *date = [NSDate dateWithTimeIntervalSince1970:[copy[@"date"] doubleValue]];
+            self.catalogCache[key] = @{ @"date": date, @"metas": metas };
+            completion(metas, nil);
+            if (age < ZLCatalogLifetime) return nil;
+            // Show the copy now, and the new answer when it comes.
+            completion = ^(NSArray *newer, NSError *error) {
+                if (newer.count) {
+                    [[NSNotificationCenter defaultCenter] postNotificationName:ZLCatalogDidUpdateNotification object:self
+                                                                      userInfo:@{ @"url": key, @"metas": newer }];
+                }
+            };
+        }
+    }
     NSDate *start = [NSDate date];
     return ZLFetchJSONWithPriority(url, ZLFetchNormal, ^(id json, NSError *error) {
         NSArray *metas = json ? ZLMetasFrom(json, addon) : nil;
-        if (!extras.count) ZLLog(@"time catalog %@ %@: %.2f s", addon.name, catalog.name, -[start timeIntervalSinceNow]);
+        if (keep) ZLLog(@"time catalog %@ %@: %.2f s", addon.name, catalog.name, -[start timeIntervalSinceNow]);
         if (metas) self.catalogCache[key] = @{ @"date": [NSDate date], @"metas": metas };
+        if (metas && keep) {
+            [self.cache setObject:@{ @"url": key, @"date": @([[NSDate date] timeIntervalSince1970]), @"json": json }
+                            named:ZLCatalogFileName(key)];
+        }
         completion(metas ?: @[], error);
     });
 }

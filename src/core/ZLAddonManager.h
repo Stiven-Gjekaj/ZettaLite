@@ -7,6 +7,9 @@
 #import "ZLMeta.h"
 
 extern NSString *const ZLAddonsDidChangeNotification;
+// A catalog that showed from the copy on the phone got a newer answer.
+// userInfo has "url" (the catalog URL as text) and "metas".
+extern NSString *const ZLCatalogDidUpdateNotification;
 
 @class ZLSourceList, ZLStore;
 
@@ -27,8 +30,9 @@ NSOperation *ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void 
 @interface ZLAddonManager : NSObject
 
 + (instancetype)shared;
-// Tests give their own store and source list.
-- (instancetype)initWithStore:(ZLStore *)store sources:(ZLSourceList *)sources;
+// Tests give their own stores and source list. store keeps the manifests.
+// cache keeps the answers of the catalogs.
+- (instancetype)initWithStore:(ZLStore *)store cache:(ZLStore *)cache sources:(ZLSourceList *)sources;
 
 // The addons, in the order of the source list. An addon that did not load
 // yet is not in the list.
@@ -45,6 +49,9 @@ NSOperation *ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void 
 // The catalogs that can be rows of Home: the ones with no required extra.
 - (NSArray *)homeCatalogs;
 
+// A catalog with no extras shows from the copy on the phone at once. When
+// the copy is older than 10 minutes, a newer answer comes later with
+// ZLCatalogDidUpdateNotification.
 - (void)loadCatalog:(ZLCatalog *)catalog extras:(NSDictionary *)extras
          completion:(void (^)(NSArray *metas, NSError *error))completion;
 
