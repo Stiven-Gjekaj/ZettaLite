@@ -88,3 +88,14 @@ ZL_TEST(test_engine_ends_at_the_end) {
     [engine close];
     [server stop];
 }
+
+ZL_TEST(test_engine_keeps_the_cues_that_it_reads) {
+    ZLTestServer *server = ZLFixtureServer();
+    ZLPlayerEngine *engine = Engine(server, @"subs-ass.mkv");
+    ZL_EXPECT([engine startAt:8 error:NULL]);
+    ShowFrames(engine, 3, NULL);
+    ZLCueList *cues = [engine.subtitles cuesOfStream:[engine.subtitles.indexes.firstObject intValue]];
+    ZL_EQUAL([cues textAt:11], @"Second line\nwith two rows");
+    [engine close];
+    [server stop];
+}

@@ -69,6 +69,7 @@ static const NSUInteger ZLLiveStartCount = 3;
 @property (nonatomic) BOOL liveEnded;
 @property (nonatomic, strong) NSError *liveError;
 @property (nonatomic) int64_t decodeShift;
+@property (nonatomic, strong) ZLEmbeddedSubtitles *subtitles;
 @end
 
 @implementation ZLRemuxSession
@@ -99,6 +100,8 @@ static const NSUInteger ZLLiveStartCount = 3;
         BOOL used = (int)i == self.videoIndex || (int)i == self.audioIndex;
         context->streams[i]->discard = used ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
     }
+    double origin = context->start_time != AV_NOPTS_VALUE ? context->start_time / (double)AV_TIME_BASE : 0;
+    self.subtitles = [[ZLEmbeddedSubtitles alloc] initWithContext:context origin:origin];
     if (self.audioIndex >= 0 && ![ZLMediaInfo systemPlaysAudio:[self stream:self.audioIndex]->codecpar]) {
         self.encoder = [[ZLAudioEncoder alloc] initWithStream:[self stream:self.audioIndex] error:error];
         if (!self.encoder) return NO;
@@ -214,6 +217,10 @@ static const NSUInteger ZLLiveStartCount = 3;
     while (YES) {
         *result = av_read_frame(self.input.context, packet);
         if (*result < 0) break;
+        if ([self.subtitles takePacket:packet]) {
+            av_packet_unref(packet);
+            continue;
+        }
         if (packet->stream_index == self.videoIndex || packet->stream_index == self.audioIndex) {
             ZLPacket *made = [ZLPacket packetWith:packet stream:[self stream:packet->stream_index]];
             av_packet_free(&packet);

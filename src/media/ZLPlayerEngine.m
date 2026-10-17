@@ -88,6 +88,7 @@ typedef struct {
 @property (nonatomic) SwrContext *resampler;
 @property (nonatomic) struct SwsContext *scaler;
 @property (nonatomic) double origin;  // The start time of the input, in seconds.
+@property (nonatomic, strong) ZLEmbeddedSubtitles *subtitles;
 @property (nonatomic) double duration;
 
 @property (nonatomic, strong) NSCondition *packetLock;
@@ -192,6 +193,7 @@ static void ZLAudioCallback(void *user, AudioQueueRef queue, AudioQueueBufferRef
         BOOL used = (int)i == self.videoIndex || (int)i == self.audioIndex;
         context->streams[i]->discard = used ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
     }
+    self.subtitles = [[ZLEmbeddedSubtitles alloc] initWithContext:context origin:self.origin];
     if (self.videoIndex >= 0) {
         self.videoDecoder = [self openDecoder:self.videoIndex threads:2 error:error];
         if (!self.videoDecoder) return NO;
@@ -269,6 +271,10 @@ static void ZLAudioCallback(void *user, AudioQueueRef queue, AudioQueueBufferRef
                     [self.packetLock broadcast];
                     [self.packetLock unlock];
                     if (result != AVERROR_EOF) ZLLog(@"player read: %d", result);
+                    continue;
+                }
+                if ([self.subtitles takePacket:packet]) {
+                    av_packet_unref(packet);
                     continue;
                 }
                 BOOL isVideo = packet->stream_index == self.videoIndex;

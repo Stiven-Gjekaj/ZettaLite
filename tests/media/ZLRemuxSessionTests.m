@@ -117,3 +117,20 @@ ZL_TEST(test_remux_plays_a_stream_that_cannot_seek_as_live) {
     [session close];
     [server stop];
 }
+
+ZL_TEST(test_remux_keeps_the_cues_of_the_segments_that_it_makes) {
+    ZLTestServer *server = ZLFixtureServer();
+    ZLInput *input = [ZLInput openURL:ZLFixtureURL(server, @"subs-srt.mkv") headers:nil error:NULL];
+    ZLRemuxSession *session = [[ZLRemuxSession alloc] initWithInput:input info:[ZLMediaInfo infoForInput:input languages:nil] audioIndex:-1];
+    ZL_EXPECT([session prepare:NULL]);
+    ZL_EQUAL_INT(session.subtitles.indexes.count, 1);
+    ZLCueList *cues = [session.subtitles cuesOfStream:[session.subtitles.indexes[0] intValue]];
+    // The first segment holds the first cue. The cue at 10 s comes with a later segment.
+    ZL_EXPECT([session segmentAtIndex:0 error:NULL].length > 0);
+    ZL_EQUAL([cues textAt:2], @"First line");
+    ZL_EXPECT(JoinSegments(session, session.segmentCount) != nil);
+    ZL_EQUAL_INT([cues count], 2);
+    ZL_EQUAL([cues textAt:11], @"Second line\nwith two rows");
+    [session close];
+    [server stop];
+}

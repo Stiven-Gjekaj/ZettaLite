@@ -12,6 +12,7 @@
 #import "ZLHLSServer.h"
 #import "ZLInput.h"
 #import "ZLMediaInfo.h"
+#import "ZLEmbeddedSubtitles.h"
 
 // The target length of a segment in seconds.
 extern const double ZLSegmentSeconds;
@@ -21,6 +22,8 @@ extern const double ZLSegmentSeconds;
 @property (nonatomic, readonly) ZLMediaInfo *info;
 @property (nonatomic, readonly) BOOL live;
 @property (nonatomic, readonly) NSUInteger segmentCount;  // 0 for live.
+// The cues of the text subtitles that the reads found. Set after prepare.
+@property (nonatomic, readonly) ZLEmbeddedSubtitles *subtitles;
 
 // The session owns the input from now on. audioIndex selects an audio
 // stream, or -1 for the choice of info.

@@ -10,6 +10,7 @@
 #import <Foundation/Foundation.h>
 #import "ZLInput.h"
 #import "ZLMediaInfo.h"
+#import "ZLEmbeddedSubtitles.h"
 
 // One decoded picture in 8-bit YUV 4:2:0, with each plane packed tight.
 @interface ZLVideoFrame : NSObject
@@ -43,6 +44,8 @@
 @property (nonatomic, readonly) int audioIndex;
 // The frames that the display did not show, because they came too late.
 @property (nonatomic, readonly) NSUInteger droppedFrames;
+// The cues of the text subtitles that the reads found. Set after start.
+@property (nonatomic, readonly) ZLEmbeddedSubtitles *subtitles;
 
 // The engine owns the input from now on.
 - (instancetype)initWithInput:(ZLInput *)input info:(ZLMediaInfo *)info;
