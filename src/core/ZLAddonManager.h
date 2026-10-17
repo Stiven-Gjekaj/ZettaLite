@@ -20,7 +20,9 @@ typedef NS_ENUM(NSInteger, ZLFetchPriority) {
 
 // Fetches a URL and reads it as JSON in the background, with normal priority.
 void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error));
-void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^completion)(id json, NSError *error));
+// Returns the operation. A cancel before it starts stops it, and then the
+// completion does not come.
+NSOperation *ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^completion)(id json, NSError *error));
 
 @interface ZLAddonManager : NSObject
 
@@ -46,7 +48,8 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
 - (void)loadCatalog:(ZLCatalog *)catalog extras:(NSDictionary *)extras
          completion:(void (^)(NSArray *metas, NSError *error))completion;
 
-// Asks each catalog with search. Each result comes when it arrives.
+// Asks each catalog with search. Each result comes when it arrives. A new
+// search stops the requests of the last one, and its blocks do not come.
 - (void)search:(NSString *)text each:(void (^)(ZLCatalog *catalog, NSArray *metas))each done:(void (^)(void))done;
 
 // Asks the addons with a meta resource for the type and the ID, in order,

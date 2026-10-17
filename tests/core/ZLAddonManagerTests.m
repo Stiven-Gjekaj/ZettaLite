@@ -131,3 +131,26 @@ ZL_TEST(test_manager_asks_for_a_manifest_again_only_when_it_is_old) {
     [server stop];
 }
 
+ZL_TEST(test_manager_stops_the_requests_of_an_old_search) {
+    ZLTestServer *server = [ZLTestServer new];
+    ZL_EXPECT([server start]);
+    NSURL *manifest = ServeAddon(server);
+    ZLAddonManager *manager = Manager(TemporaryStore(), manifest);
+    [manager reload];
+    ZL_EXPECT(WaitFor(^{ return (BOOL)(manager.addons.count == 1); }, 10));
+    NSUInteger requests = server.requestCount;
+    // Slow answers, so that most requests of the first search wait in the queue.
+    server.delay = 0.3;
+    __block NSUInteger oldResults = 0, newResults = 0;
+    __block BOOL oldDone = NO, newDone = NO;
+    [manager search:@"a" each:^(ZLCatalog *catalog, NSArray *metas) { oldResults++; } done:^{ oldDone = YES; }];
+    [manager search:@"b" each:^(ZLCatalog *catalog, NSArray *metas) { newResults++; } done:^{ newDone = YES; }];
+    ZL_EXPECT(WaitFor(^{ return newDone; }, 20));
+    RunFor(0.5);
+    ZL_EQUAL_INT(newResults, 10);
+    ZL_EQUAL_INT(oldResults, 0);
+    ZL_EXPECT(!oldDone);
+    // At most 4 requests of the first search ran. The queue runs 4 at a time.
+    ZL_EXPECT(server.requestCount - requests <= 14);
+    [server stop];
+}

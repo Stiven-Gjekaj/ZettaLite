@@ -29,7 +29,7 @@ void ZLFetchJSON(NSURL *url, void (^completion)(id json, NSError *error)) {
     ZLFetchJSONWithPriority(url, ZLFetchNormal, completion);
 }
 
-void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^completion)(id json, NSError *error)) {
+NSOperation *ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^completion)(id json, NSError *error)) {
     NSBlockOperation *operation = [NSBlockOperation blockOperationWithBlock:^{
         NSError *error = nil;
         NSData *data = [ZLHTTPStream fetch:url headers:@{ @"Accept": @"application/json" } finalURL:NULL error:&error];
@@ -40,11 +40,14 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
     }];
     operation.queuePriority = priority == ZLFetchHigh ? NSOperationQueuePriorityHigh : NSOperationQueuePriorityNormal;
     [ZLNetworkQueue() addOperation:operation];
+    return operation;
 }
 
 @interface ZLAddonManager ()
 @property (nonatomic, strong) ZLStore *store;
 @property (nonatomic, strong) ZLSourceList *sources;
+@property (nonatomic) NSUInteger searchGeneration;
+@property (nonatomic, strong) NSMutableArray *searchOperations;
 @property (nonatomic, strong) NSArray *addons;
 @property (nonatomic, strong) NSDictionary *failures;
 @property (nonatomic, strong) NSMutableDictionary *catalogCache;
@@ -73,6 +76,7 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
         _failures = @{};
         _catalogCache = [NSMutableDictionary dictionary];
         _waiting = [NSMutableArray array];
+        _searchOperations = [NSMutableArray array];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload)
                                                      name:ZLSourcesDidChangeNotification object:sources];
     }
@@ -194,25 +198,43 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
 
 - (void)loadCatalog:(ZLCatalog *)catalog extras:(NSDictionary *)extras
          completion:(void (^)(NSArray *metas, NSError *error))completion {
+    [self fetchCatalog:catalog extras:extras completion:completion];
+}
+
+// Returns the operation of the request, or nil when the answer was in memory.
+- (NSOperation *)fetchCatalog:(ZLCatalog *)catalog extras:(NSDictionary *)extras
+                   completion:(void (^)(NSArray *metas, NSError *error))completion {
     NSURL *url = [catalog URLWithExtras:extras];
-    NSDictionary *cached = self.catalogCache[url.absoluteString];
+    NSString *key = url.absoluteString;
+    NSDictionary *cached = self.catalogCache[key];
     if (cached && -[cached[@"date"] timeIntervalSinceNow] < ZLCatalogLifetime) {
         completion(cached[@"metas"], nil);
-        return;
+        return nil;
     }
     ZLAddon *addon = catalog.addon;
     NSDate *start = [NSDate date];
-    ZLFetchJSON(url, ^(id json, NSError *error) {
+    return ZLFetchJSONWithPriority(url, ZLFetchNormal, ^(id json, NSError *error) {
         NSArray *metas = json ? ZLMetasFrom(json, addon) : nil;
         if (!extras.count) ZLLog(@"time catalog %@ %@: %.2f s", addon.name, catalog.name, -[start timeIntervalSinceNow]);
-        if (metas) self.catalogCache[url.absoluteString] = @{ @"date": [NSDate date], @"metas": metas };
+        if (metas) self.catalogCache[key] = @{ @"date": [NSDate date], @"metas": metas };
         completion(metas ?: @[], error);
     });
 }
 
 - (void)search:(NSString *)text each:(void (^)(ZLCatalog *, NSArray *))each done:(void (^)(void))done {
+    // A new search stops the requests of the last one that did not start.
+    NSUInteger generation = ++self.searchGeneration;
+    for (NSOperation *operation in self.searchOperations) [operation cancel];
+    [self.searchOperations removeAllObjects];
+    [self searchNow:text generation:generation each:each done:done];
+}
+
+- (void)searchNow:(NSString *)text generation:(NSUInteger)generation
+             each:(void (^)(ZLCatalog *, NSArray *))each done:(void (^)(void))done {
     if (self.loading) {
-        [self whenReady:^{ [self search:text each:each done:done]; }];
+        [self whenReady:^{
+            if (generation == self.searchGeneration) [self searchNow:text generation:generation each:each done:done];
+        }];
         return;
     }
     NSMutableArray *catalogs = [NSMutableArray array];
@@ -230,7 +252,8 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
     __block BOOL first = YES;
     NSUInteger total = catalogs.count;
     for (ZLCatalog *catalog in catalogs) {
-        [self loadCatalog:catalog extras:@{ @"search": text } completion:^(NSArray *metas, NSError *error) {
+        NSOperation *operation = [self fetchCatalog:catalog extras:@{ @"search": text } completion:^(NSArray *metas, NSError *error) {
+            if (generation != self.searchGeneration) return;
             if (metas.count && first) {
                 first = NO;
                 ZLLog(@"time search first result: %.2f s", -[start timeIntervalSinceNow]);
@@ -238,9 +261,11 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
             if (metas.count) each(catalog, metas);
             if (--left == 0) {
                 ZLLog(@"time search %lu catalogs: %.2f s", (unsigned long)total, -[start timeIntervalSinceNow]);
+                [self.searchOperations removeAllObjects];
                 done();
             }
         }];
+        if (operation) [self.searchOperations addObject:operation];
     }
 }
 
