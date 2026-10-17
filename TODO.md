@@ -65,7 +65,7 @@ for each choice is in [docs/decisions.md](docs/decisions.md).
 - Show them over both players, with a picker and a size setting.
 - Add the language settings.
 
-## 1.0.0
+## 1.0.0 (done, 2026-10-17)
 
 - Check each feature on the iPhone 4S with iOS 6.1.3.
 - Release the .deb, and add it to the Cydia repository.
