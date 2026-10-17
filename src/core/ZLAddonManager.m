@@ -100,6 +100,7 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
     // A request for a manifest that is not on the phone waits for the load.
     self.loading = manifests.count < sources.count;
 
+    NSDate *start = [NSDate date];
     // Get each manifest again, so that a change of an addon shows.
     __block NSUInteger left = sources.count;
     NSMutableDictionary *failures = [NSMutableDictionary dictionary];
@@ -116,6 +117,7 @@ void ZLFetchJSONWithPriority(NSURL *url, ZLFetchPriority priority, void (^comple
                 failures[key] = error.localizedDescription ?: @"The link does not give an addon manifest.";
             }
             if (--left == 0) {
+                ZLLog(@"time manifests %lu: %.2f s", (unsigned long)sources.count, -[start timeIntervalSinceNow]);
                 [self.store setObject:manifests named:@"manifests"];
                 [self buildFrom:manifests sources:sources failures:failures];
                 [self finishLoading];
@@ -180,8 +182,10 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
         return;
     }
     ZLAddon *addon = catalog.addon;
+    NSDate *start = [NSDate date];
     ZLFetchJSON(url, ^(id json, NSError *error) {
         NSArray *metas = json ? ZLMetasFrom(json, addon) : nil;
+        if (!extras.count) ZLLog(@"time catalog %@ %@: %.2f s", addon.name, catalog.name, -[start timeIntervalSinceNow]);
         if (metas) self.catalogCache[url.absoluteString] = @{ @"date": [NSDate date], @"metas": metas };
         completion(metas ?: @[], error);
     });
@@ -203,18 +207,38 @@ static NSArray *ZLMetasFrom(id json, ZLAddon *addon) {
         done();
         return;
     }
+    NSDate *start = [NSDate date];
+    __block BOOL first = YES;
+    NSUInteger total = catalogs.count;
     for (ZLCatalog *catalog in catalogs) {
         [self loadCatalog:catalog extras:@{ @"search": text } completion:^(NSArray *metas, NSError *error) {
+            if (metas.count && first) {
+                first = NO;
+                ZLLog(@"time search first result: %.2f s", -[start timeIntervalSinceNow]);
+            }
             if (metas.count) each(catalog, metas);
-            if (--left == 0) done();
+            if (--left == 0) {
+                ZLLog(@"time search %lu catalogs: %.2f s", (unsigned long)total, -[start timeIntervalSinceNow]);
+                done();
+            }
         }];
     }
 }
 
 - (void)loadMeta:(NSString *)type identifier:(NSString *)identifier
       completion:(void (^)(ZLMeta *, NSError *))completion {
+    NSDate *start = [NSDate date];
+    void (^done)(ZLMeta *, NSError *) = ^(ZLMeta *meta, NSError *error) {
+        ZLLog(@"time meta %@: %.2f s", identifier, -[start timeIntervalSinceNow]);
+        completion(meta, error);
+    };
+    [self loadMetaNow:type identifier:identifier completion:done];
+}
+
+- (void)loadMetaNow:(NSString *)type identifier:(NSString *)identifier
+         completion:(void (^)(ZLMeta *, NSError *))completion {
     if (self.loading) {
-        [self whenReady:^{ [self loadMeta:type identifier:identifier completion:completion]; }];
+        [self whenReady:^{ [self loadMetaNow:type identifier:identifier completion:completion]; }];
         return;
     }
     NSMutableArray *addons = [NSMutableArray array];

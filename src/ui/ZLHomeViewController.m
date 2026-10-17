@@ -5,6 +5,7 @@
 #import "ZLImageLoader.h"
 #import "ZLLibrary.h"
 #import "ZLLibraryRows.h"
+#import "ZLLog.h"
 #import "ZLRowCell.h"
 #import "ZLTheme.h"
 #import "ZLTitleViewController.h"
@@ -304,6 +305,7 @@ typedef NS_ENUM(NSInteger, ZLHomeFilter) { ZLHomeAll, ZLHomeMovies, ZLHomeSeries
     [self.loading addObject:key];
     [[ZLAddonManager shared] loadCatalog:catalog extras:nil completion:^(NSArray *metas, NSError *error) {
         [self.loading removeObject:key];
+        ZLLog(@"home row %@ %@: %lu titles", catalog.addon.name, catalog.name, (unsigned long)metas.count);
         if (error && !metas.count) self.errors[key] = [NSString stringWithFormat:@"The catalog did not load. %@", error.localizedDescription];
         else self.results[key] = metas;
         NSUInteger row = [self.catalogs indexOfObject:catalog];

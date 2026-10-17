@@ -28,6 +28,7 @@ NSString *const ZLShowSourcesNotification = @"ZLShowSources";
 @implementation ZLAppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    ZLLog(@"launch %@", [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"]);
     // Play the sound also when the ring switch is off, and when the screen locks.
     [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:NULL];
     [[ZLHLSServer shared] start:NULL];
