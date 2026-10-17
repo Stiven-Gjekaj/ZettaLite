@@ -95,6 +95,11 @@ static NSString *ZLTimeText(double seconds) {
     self.videoView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [view addSubview:self.videoView];
 
+    if (self.subtitles) {
+        self.subtitles.view.frame = view.bounds;
+        [view addSubview:self.subtitles.view];
+    }
+
     self.topBar = [self barView];
     [self.topBar addSubview:[self barButton:@"Done" action:@selector(done)]];
     self.titleLabel = [UILabel new];
@@ -105,6 +110,7 @@ static NSString *ZLTimeText(double seconds) {
     self.titleLabel.text = self.titleText;
     [self.topBar addSubview:self.titleLabel];
     [self.topBar addSubview:[self barButton:@"Fit" action:@selector(toggleGravity:)]];
+    if (self.subtitles) [self.topBar addSubview:[self barButton:@"Subs" action:@selector(chooseSubtitles)]];
     [view addSubview:self.topBar];
 
     self.bottomBar = [self barView];
@@ -147,8 +153,9 @@ static NSString *ZLTimeText(double seconds) {
     self.topBar.frame = CGRectMake(0, 0, width, 50);
     NSArray *top = self.topBar.subviews;
     [top[0] setFrame:CGRectMake(8, 9, 60, 32)];
-    self.titleLabel.frame = CGRectMake(76, 9, width - 152, 32);
+    self.titleLabel.frame = CGRectMake(76, 9, width - (top.count > 3 ? 220 : 152), 32);
     [top[2] setFrame:CGRectMake(width - 68, 9, 60, 32)];
+    if (top.count > 3) [top[3] setFrame:CGRectMake(width - 136, 9, 60, 32)];
     self.bottomBar.frame = CGRectMake(0, bounds.size.height - 56, width, 56);
     self.playButton.frame = CGRectMake(8, 12, 64, 32);
     self.elapsedLabel.frame = CGRectMake(76, 12, 52, 32);
@@ -211,6 +218,7 @@ static NSString *ZLTimeText(double seconds) {
 - (void)tick {
     ZLVideoFrame *frame = [self.engine frameToShow];
     if (frame) [self.videoView showFrame:frame];
+    [self.subtitles showAt:[self.engine position]];
     if (!self.controlsShown || self.dragging) return;
     double position = [self.engine position];
     double duration = self.engine.duration;
@@ -256,6 +264,8 @@ static NSString *ZLTimeText(double seconds) {
 
 - (void)setControlsShown:(BOOL)shown animated:(BOOL)animated {
     _controlsShown = shown;
+    // The subtitles move up over the controls.
+    self.subtitles.bottomInset = shown ? 64 : 16;
     [UIView animateWithDuration:animated ? 0.25 : 0 animations:^{
         self.topBar.alpha = shown ? 1 : 0;
         self.bottomBar.alpha = shown ? 1 : 0;
@@ -287,6 +297,11 @@ static NSString *ZLTimeText(double seconds) {
     self.dragging = NO;
     [self.engine seekTo:self.slider.value * self.engine.duration];
     [self scheduleHide];
+}
+
+- (void)chooseSubtitles {
+    [self scheduleHide];
+    [self.subtitles showPickerInView:self.view];
 }
 
 - (void)chooseAudio {
