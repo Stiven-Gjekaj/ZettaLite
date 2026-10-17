@@ -4,6 +4,30 @@ Every release is written here, newest first. A version is
 `MAJOR.MINOR.PATCH`. Before 1.0.0, each big addition raises the minor number.
 Each release on GitHub has the `.deb` package as an asset.
 
+## 1.1.0 (2026-10-17)
+
+Faster networking. Measured on the iPhone 4S with 28 sources, as the
+median of 5 cold starts:
+
+| Step | 1.0.1 | 1.1.0 |
+| ---- | ----- | ----- |
+| The first row of Home shows | 21.4 s | 0.7 s |
+| The second row of Home shows | 36.3 s | 1.2 s |
+| A title page loads | 7.5 s | 0.9 s |
+| The first search result comes | 9.8 s | 1.0 s |
+
+- A request to an addon keeps its connection open for the next request
+  to the same host. A new connection resumes the TLS session of the host.
+- Requests to addons and playlists ask for gzip.
+- The app asks for a manifest again only when it is older than 6 hours.
+  Pull to refresh on Home asks for all of them.
+- Home shows the copy of each row from the last start at once, and then
+  the new answer.
+- A new search stops the requests of the last search.
+- A host that fails two requests in a row is skipped for 2 minutes.
+- The log shows the time of the manifests, the catalogs, a title, and a
+  search. `scripts/measure.sh` measures them on the phone.
+
 ## 1.0.1 (2026-10-17)
 
 Fixes for a long source list.
